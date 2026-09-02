@@ -240,7 +240,7 @@ export function CustomerHome() {
       {/* Hero Section */}
       <div className="text-center mb-16 space-y-4">
         <h1 className="text-4xl lg:text-[3.5rem] font-extrabold text-text-navy leading-tight">
-          CoWork
+          ShramSangam
         </h1>
         <p className="text-xl text-text-secondary">
           Local skills. Shared opportunity.
