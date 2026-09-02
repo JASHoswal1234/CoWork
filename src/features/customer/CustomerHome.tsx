@@ -1,304 +1,177 @@
-/**
- * Customer Home Page - Hero Landing and Service Selection
- * 
- * PRIORITY SCREEN: Part of customer journey
- * 
- * Validates Requirements: 3.1, 14.1, 14.2, 14.3, 16.1
- */
-
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowRight, Check, ImagePlus, MapPin, ShieldCheck, Sparkles } from 'lucide-react';
 import { useMockData } from '../../contexts/MockDataContext';
-import { Card } from '../../components/primitives/Card';
-import { Icon } from '../../components/primitives/Icon';
-import { dispatchWorker } from '../../engines/dispatchEngine';
+import { dispatchWorker, type DispatchResult } from '../../engines/dispatchEngine';
 import type { ServiceRequest } from '../../types/job';
+import type { ServiceCategory } from '../../types/service';
+
+type CustomerStage = 'browse' | 'request' | 'dispatch' | 'matched';
+
+const illustrationByService: Record<string, string> = {
+  Plumbing: '/illustrations/plumber.png', Electrical: '/illustrations/electrician.png', Carpentry: '/illustrations/carpenter.png',
+  Painting: '/illustrations/painting.png', Cleaning: '/illustrations/cleaning.png', 'Appliance Repair': '/illustrations/appliance-repair.png'
+};
+const surfaceByService: Record<string, string> = {
+  Plumbing: 'bg-[#e3f2fd]', Electrical: 'bg-[#fff3e0]', Carpentry: 'bg-[#f3e5f5]',
+  Painting: 'bg-[#e8f5e9]', Cleaning: 'bg-[#fce4ec]', 'Appliance Repair': 'bg-[#fff8e1]'
+};
+const formPanelSurface = 'bg-[#eaf1f8]'; // Consistent color for form request panels
+const diagnosisByService: Record<string, string> = {
+  Plumbing: 'This looks like a likely pipe or fixture leak. A verified plumbing worker can inspect the connection and carry out the repair.',
+  Electrical: 'The image may show a worn electrical fitting. For safety, a verified electrician should inspect the circuit before any repair.',
+  Carpentry: 'This appears to need a furniture or fixture repair. A cooperative carpenter can assess the damaged fitting on arrival.',
+  Painting: 'The image suggests a surface-preparation and repainting job. The worker can confirm the scope after inspecting the wall.',
+  Cleaning: 'The image suggests a deep-cleaning request. The worker can confirm the materials and time needed on arrival.',
+  'Appliance Repair': 'The appliance may need a diagnostic visit. A verified technician can inspect the unit and confirm the required repair.'
+};
+
+function ServiceCard({ service, index, onSelect }: { service: ServiceCategory; index: number; onSelect: () => void }) {
+  const featured = index === 0;
+  const bgColor = surfaceByService[service.name] || 'bg-[#f5f5f5]';
+  return <article className={`group relative isolate flex min-h-[300px] overflow-hidden rounded-[20px] border border-black/5 ${bgColor} p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(18,18,18,0.09)] sm:min-h-[340px] sm:rounded-[24px] sm:p-6 ${featured ? 'md:col-span-2 md:min-h-[430px]' : ''}`}>
+    <div className="relative z-10 flex max-w-[60%] flex-col justify-between sm:max-w-[58%]"><div><p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-text-secondary sm:text-[10px] sm:tracking-[0.16em]">{String(index + 1).padStart(2, '0')}</p><h3 className={`mt-3 font-extrabold tracking-[-0.055em] text-text-navy sm:mt-4 ${featured ? 'text-3xl sm:text-4xl md:text-5xl' : 'text-2xl sm:text-3xl'}`}>{service.name}</h3><p className="mt-2.5 text-xs leading-5 text-text-secondary sm:mt-3 sm:text-sm">{service.description.split(' including ')[0]}</p></div><div className="pt-5 sm:pt-6"><div className="mb-4 grid max-w-[260px] grid-cols-2 gap-2.5 sm:mb-5 sm:max-w-[280px] sm:gap-3"><div><p className="font-mono text-[8px] font-semibold tracking-[0.12em] text-text-secondary sm:text-[9px]">ESTIMATE</p><p className="mt-1 text-sm font-extrabold tracking-[-0.03em] text-text-navy sm:text-[15px]">{service.avgPrice.replace('-', '—')}</p></div><div className="border-l border-black/10 pl-2.5 sm:pl-3"><p className="font-mono text-[8px] font-semibold tracking-[0.12em] text-text-secondary sm:text-[9px]">TIME</p><p className="mt-1 text-sm font-extrabold tracking-[-0.03em] text-text-navy sm:text-[15px]">{service.avgDuration.replace('hours', 'hrs').replace('hour', 'hr').toUpperCase()}</p></div></div><button onClick={onSelect} className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent-primary transition-transform group-hover:translate-x-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-primary sm:gap-2 sm:text-sm">REQUEST SERVICE <ArrowRight size={14} strokeWidth={2} className="sm:h-4 sm:w-4" /></button></div></div>
+    <img src={illustrationByService[service.name]} alt={`${service.name} service illustration`} className={`pointer-events-none absolute bottom-[-6%] right-[-12%] z-0 h-[82%] max-w-[72%] object-contain object-bottom transition-transform duration-500 group-hover:scale-[1.045] group-hover:-rotate-1 sm:right-[-9%] sm:h-[87%] sm:max-w-[70%] ${featured ? 'md:h-[104%] md:right-[1%] md:max-w-[52%]' : ''}`} />
+  </article>;
+}
+
+function CustomerRequestForm({ service, description, setDescription, urgency, setUrgency, uploadedImage, isDiagnosing, onUpload, onBack, onFind }: {
+  service: ServiceCategory;
+  description: string;
+  setDescription: (value: string) => void;
+  urgency: 'normal' | 'urgent';
+  setUrgency: (value: 'normal' | 'urgent') => void;
+  uploadedImage: string | null;
+  isDiagnosing: boolean;
+  onUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onBack: () => void;
+  onFind: () => void;
+}) {
+  return <main className="mx-auto min-h-screen max-w-6xl px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14">
+    <button onClick={onBack} className="mb-6 min-h-[44px] font-mono text-xs font-semibold tracking-[0.1em] text-text-secondary hover:text-accent-primary sm:mb-8 md:mb-10">← ALL SERVICES</button>
+    <div className="grid items-start gap-6 sm:gap-7 md:gap-8 lg:grid-cols-[0.82fr_1.18fr]">
+      <aside className={`relative min-h-[360px] overflow-hidden rounded-[28px] ${formPanelSurface} p-6 sm:min-h-[420px] sm:rounded-[32px] sm:p-7 md:min-h-[680px] md:rounded-[36px] md:p-10 lg:sticky lg:top-28`}>
+        {/* Background illustration layer - oversized and positioned */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+          {/* Subtle circular gradient overlay for depth */}
+          <div className="absolute bottom-[-15%] right-[-10%] h-[65%] w-[65%] rounded-full bg-white/30 sm:bg-white/35 md:bottom-[-10%] md:right-[-8%] md:h-[60%] md:w-[60%]" />
+          
+          {/* Large illustration as background stencil */}
+          <img 
+            src="/illustrations/form-illustration.png" 
+            alt="" 
+            className="absolute bottom-[-8%] right-[-15%] h-[108%] w-auto max-w-none opacity-75 sm:bottom-[-7%] sm:opacity-80 md:bottom-[-5%] md:right-[-12%] md:h-[115%] md:opacity-85"
+            style={{ objectFit: 'contain', objectPosition: 'bottom right' }}
+          />
+        </div>
+        
+        {/* Text content layer - above illustration */}
+        <div className="relative z-10 flex h-full flex-col">
+          <div className="max-w-[75%] sm:max-w-[72%] md:max-w-[70%]">
+            <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-text-secondary sm:text-[10px] sm:tracking-[0.16em]">ON-DEMAND SERVICE</p>
+            <h1 className="mt-3 text-[clamp(2rem,7vw,2.75rem)] font-extrabold leading-[0.92] tracking-[-0.06em] text-text-navy sm:mt-4">
+              {service.name}, when you need it.
+            </h1>
+          </div>
+          
+          {/* Push network label to bottom */}
+          <div className="mt-auto pt-6 sm:pt-7 md:pt-8">
+            <p className="font-mono text-[9px] font-semibold tracking-[0.12em] text-accent-primary sm:text-[10px]">PUNE · DEMO NETWORK</p>
+          </div>
+        </div>
+      </aside>
+      <section className="rounded-[24px] border border-status-subtle bg-white p-5 sm:rounded-[28px] sm:p-6 md:rounded-[32px] md:p-10">
+        <div className="mb-7 flex items-center gap-2.5 font-mono text-[9px] font-semibold tracking-[0.12em] text-text-secondary sm:mb-8 sm:gap-3 sm:text-[10px] md:mb-10">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-primary text-white sm:h-7 sm:w-7">1</span> DESCRIBE 
+          <span className="h-px w-6 bg-status-subtle sm:w-8" /> 
+          <span>2 MATCH</span>
+        </div>
+        <h2 className="text-3xl font-extrabold tracking-[-0.045em] text-text-navy md:text-4xl">Tell us what needs attention.</h2>
+        <p className="mt-3 max-w-lg text-text-secondary">We’ll use your request to find an available, verified cooperative worker nearby.</p>
+        <div className="mt-8 rounded-2xl border border-accent-primary/15 bg-accent-light/50 p-4">
+          <div className="flex items-start gap-3"><div className="mt-0.5 rounded-xl bg-white p-2 text-accent-primary"><Sparkles size={16} /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-text-navy">Photo-assisted problem note</p><span className="font-mono text-[9px] font-semibold tracking-[0.1em] text-accent-primary">SIMULATED DEMO</span></div><p className="mt-1 text-xs leading-5 text-text-secondary">Upload a photo and a hardcoded demo diagnosis will help draft your request.</p><div className="mt-3 flex flex-wrap items-center gap-3"><label htmlFor="problem-photo" className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-accent-primary bg-white px-3 py-2 text-xs font-semibold text-accent-primary transition hover:bg-accent-primary hover:text-white"><ImagePlus size={15} /> {uploadedImage ? 'CHANGE PHOTO' : 'UPLOAD PHOTO'}</label><input id="problem-photo" className="sr-only" type="file" accept="image/*" onChange={onUpload} />{isDiagnosing && <span className="font-mono text-[10px] tracking-[0.08em] text-accent-primary">ANALYSING PHOTO…</span>}{uploadedImage && !isDiagnosing && <span className="flex items-center gap-1 font-mono text-[10px] tracking-[0.08em] text-accent-primary"><Check size={13} /> NOTE ADDED</span>}</div>{uploadedImage && <img src={uploadedImage} alt="Problem photo preview" className="mt-4 h-20 w-20 rounded-xl border border-white object-cover" />}</div></div>
+        </div>
+        <label htmlFor="problem" className="mt-7 block font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">DESCRIBE THE PROBLEM</label>
+        <textarea id="problem" value={description} onChange={event => setDescription(event.target.value)} placeholder="My kitchen sink is leaking." rows={5} className="mt-3 w-full resize-none rounded-2xl border border-status-subtle bg-background-primary px-4 py-4 text-base outline-none transition focus:border-accent-primary focus:bg-white" />
+        <div className="mt-7 grid gap-6 sm:grid-cols-2"><div><p className="font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">LOCATION</p><div className="mt-3 flex items-center gap-3 rounded-2xl border border-status-subtle px-4 py-3 text-sm font-medium text-text-navy"><MapPin size={17} className="text-accent-primary" /> Kothrud, Pune <span className="ml-auto font-mono text-[9px] text-text-tertiary">DEMO</span></div></div><div><p className="font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">URGENCY</p><div className="mt-3 flex rounded-2xl bg-background-primary p-1">{(['normal', 'urgent'] as const).map(value => <button key={value} onClick={() => setUrgency(value)} className={`flex-1 rounded-xl py-2 text-xs font-semibold uppercase tracking-[0.08em] transition ${urgency === value ? 'bg-white text-accent-primary shadow-sm' : 'text-text-secondary'}`}>{value}</button>)}</div></div></div>
+        <button onClick={onFind} disabled={description.trim().length < 10 || isDiagnosing} className="mt-10 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-accent-primary px-6 py-4 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-status-neutral md:w-auto">FIND A WORKER <ArrowRight size={18} /></button>
+      </section>
+    </div>
+  </main>;
+}
 
 export function CustomerHome() {
   const { services, workers } = useMockData();
   const navigate = useNavigate();
-  const [selectedService, setSelectedService] = useState<string | null>(null);
+  const [stage, setStage] = useState<CustomerStage>('browse');
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [description, setDescription] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [urgency, setUrgency] = useState<'normal' | 'urgent'>('normal');
+  const [dispatchResult, setDispatchResult] = useState<DispatchResult | null>(null);
+  const [visibleStep, setVisibleStep] = useState(0);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
+  const selectedService = useMemo(() => services.find(service => service.id === selectedServiceId), [services, selectedServiceId]);
 
-  const handleServiceSelect = (serviceId: string) => {
-    setSelectedService(serviceId);
-  };
+  useEffect(() => {
+    if (stage !== 'dispatch' || !dispatchResult) return;
+    if (visibleStep >= dispatchResult.steps.length) { const reveal = window.setTimeout(() => setStage('matched'), 600); return () => window.clearTimeout(reveal); }
+    const timer = window.setTimeout(() => setVisibleStep(current => current + 1), 650);
+    return () => window.clearTimeout(timer);
+  }, [stage, dispatchResult, visibleStep]);
 
+  const selectService = (serviceId: string) => { setSelectedServiceId(serviceId); setDescription(''); setUploadedImage(null); setIsDiagnosing(false); setStage('request'); };
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUploadedImage(reader.result as string);
-        simulateAIAnalysis();
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const simulateAIAnalysis = () => {
-    setAiAnalyzing(true);
-    
-    setTimeout(() => {
-      const aiDiagnosis = getAIDiagnosis(selectedService);
-      setDescription(aiDiagnosis);
-      setAiAnalyzing(false);
-    }, 2000);
-  };
-
-  const getAIDiagnosis = (serviceId: string | null): string => {
-    const diagnoses: Record<string, string> = {
-      'S001': 'Based on the image analysis, this appears to be a leak in the main water pipe connection under the sink. Estimated repair time: 1 hour. Requires pipe sealant and wrench.',
-      'S002': 'AI detected a faulty circuit breaker switch showing signs of wear. Recommend immediate replacement to prevent electrical hazards. Service time: 45 minutes.',
-      'S003': 'Image shows a damaged door hinge with loose screws. Simple repair needed - hinge replacement and proper mounting. Estimated time: 30 minutes.',
-      'S004': 'Wall surface shows peeling paint and moisture damage. Requires surface preparation, primer application, and repainting. Estimated time: 3-4 hours.',
-      'S005': 'Heavy buildup detected in kitchen exhaust and countertop areas. Deep cleaning with degreaser recommended. Estimated time: 2 hours.',
-      'S006': 'Refrigerator compressor showing irregular patterns. Likely needs coolant refill or compressor check. Estimated repair: 1-2 hours.'
+    if (!file || !selectedService) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setUploadedImage(reader.result as string);
+      setIsDiagnosing(true);
+      window.setTimeout(() => {
+        setDescription(diagnosisByService[selectedService.name] || 'Image review complete. Please add any details that will help the worker.');
+        setIsDiagnosing(false);
+      }, 1400);
     };
-    
-    return diagnoses[serviceId || 'S001'] || 'AI analysis complete. Please describe additional details about the issue.';
+    reader.readAsDataURL(file);
+  };
+  const handleFindWorker = () => {
+    if (!selectedService || description.trim().length < 10) return;
+    const eligibleWorker = workers.find(worker => worker.available && worker.skills.some(skill => skill.category === selectedService.name && skill.verified));
+    if (!eligibleWorker) return;
+    const request: ServiceRequest = { serviceCategory: selectedService.name, serviceSubcategory: selectedService.subcategories[0]?.name || '', description: description.trim(), location: { address: 'Kothrud, Pune · DEMO', coordinates: eligibleWorker.location.coordinates }, immediate: true };
+    try { setDispatchResult(dispatchWorker(request, workers)); setVisibleStep(0); setStage('dispatch'); } catch (error) { console.error('Mock dispatch error:', error); }
   };
 
-  const handleRequestService = async () => {
-    if (!selectedService || !description.trim()) return;
+  if (stage === 'request' && selectedService) return <CustomerRequestForm
+    service={selectedService}
+    description={description}
+    setDescription={setDescription}
+    urgency={urgency}
+    setUrgency={setUrgency}
+    uploadedImage={uploadedImage}
+    isDiagnosing={isDiagnosing}
+    onUpload={handleImageUpload}
+    onBack={() => setStage('browse')}
+    onFind={handleFindWorker}
+  />;
 
-    setLoading(true);
+  if (stage === 'request' && selectedService) return <main className="mx-auto min-h-screen max-w-6xl px-5 py-8 md:px-10 md:py-14"><button onClick={() => setStage('browse')} className="mb-10 font-mono text-xs font-semibold tracking-[0.1em] text-text-secondary hover:text-accent-primary">← ALL SERVICES</button><div className="grid items-start gap-8 lg:grid-cols-[0.82fr_1.18fr]"><aside className={`relative min-h-[300px] overflow-hidden rounded-[32px] ${surfaceByService[selectedService.name]} p-7 lg:sticky lg:top-28`}><p className="font-mono text-[10px] font-semibold tracking-[0.16em] text-text-secondary">ON-DEMAND SERVICE</p><h1 className="mt-4 max-w-xs text-4xl font-extrabold leading-[0.92] tracking-[-0.06em] text-text-navy">{selectedService.name}, when you need it.</h1><img src={illustrationByService[selectedService.name]} alt="" className="absolute bottom-[-11%] right-[-8%] h-[64%] max-w-[62%] object-contain" /></aside><section className="rounded-[32px] border border-status-subtle bg-white p-6 md:p-10"><div className="mb-10 flex items-center gap-3 font-mono text-[10px] font-semibold tracking-[0.12em] text-text-secondary"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-primary text-white">1</span> DESCRIBE <span className="h-px w-8 bg-status-subtle" /> <span>2 MATCH</span></div><h2 className="text-3xl font-extrabold tracking-[-0.045em] text-text-navy md:text-4xl">Tell us what needs attention.</h2><p className="mt-3 max-w-lg text-text-secondary">We’ll use your request to find an available, verified cooperative worker nearby.</p><label htmlFor="problem" className="mt-9 block font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">DESCRIBE THE PROBLEM</label><textarea id="problem" value={description} onChange={event => setDescription(event.target.value)} placeholder="My kitchen sink is leaking." rows={5} className="mt-3 w-full resize-none rounded-2xl border border-status-subtle bg-background-primary px-4 py-4 text-base outline-none transition focus:border-accent-primary focus:bg-white" /><div className="mt-7 grid gap-6 sm:grid-cols-2"><div><p className="font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">LOCATION</p><div className="mt-3 flex items-center gap-3 rounded-2xl border border-status-subtle px-4 py-3 text-sm font-medium text-text-navy"><MapPin size={17} className="text-accent-primary" /> Kothrud, Pune <span className="ml-auto font-mono text-[9px] text-text-tertiary">DEMO</span></div></div><div><p className="font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">URGENCY</p><div className="mt-3 flex rounded-2xl bg-background-primary p-1">{(['normal', 'urgent'] as const).map(value => <button key={value} onClick={() => setUrgency(value)} className={`flex-1 rounded-xl py-2 text-xs font-semibold uppercase tracking-[0.08em] transition ${urgency === value ? 'bg-white text-accent-primary shadow-sm' : 'text-text-secondary'}`}>{value}</button>)}</div></div></div><button onClick={handleFindWorker} disabled={description.trim().length < 10} className="mt-10 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-accent-primary px-6 py-4 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-status-neutral md:w-auto">FIND A WORKER <ArrowRight size={18} /></button></section></div></main>;
 
-    // Create mock service request
-    const request: ServiceRequest = {
-      serviceCategory: services.find(s => s.id === selectedService)?.name || '',
-      serviceSubcategory: '',
-      description: description.trim(),
-      location: {
-        address: 'Demo Location, Delhi',
-        coordinates: { lat: 28.6139, lng: 77.2090 }
-      },
-      immediate: true
-    };
-
-    try {
-      // Simulate dispatch
-      const result = await new Promise<any>((resolve) => {
-        setTimeout(() => {
-          resolve(dispatchWorker(request, workers));
-        }, 2000);
-      });
-
-      // Navigate to live job (mock job creation)
-      navigate('/job/DEMO001');
-    } catch (error) {
-      console.error('Dispatch error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (selectedService) {
-    const service = services.find(s => s.id === selectedService);
-    
-    return (
-      <div className="min-h-screen px-6 py-12 max-w-4xl mx-auto">
-        <button
-          onClick={() => setSelectedService(null)}
-          className="text-accent-primary font-medium mb-8 hover:underline"
-        >
-          ← Back to services
-        </button>
-
-        <div className="space-y-8">
-          <div>
-            <h1 className="text-4xl font-extrabold text-text-navy mb-4">
-              Request {service?.name} Service
-            </h1>
-            <p className="text-text-secondary text-lg">
-              Describe what you need help with
-            </p>
-          </div>
-
-          <Card variant="container" padding="lg">
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-mono font-medium text-text-secondary mb-2">
-                  SERVICE CATEGORY
-                </label>
-                <p className="text-xl font-semibold">{service?.name}</p>
-              </div>
-
-              <div>
-                <label htmlFor="description" className="block text-sm font-mono font-medium text-text-secondary mb-2">
-                  DESCRIPTION *
-                </label>
-                
-                {/* AI Photo Upload Feature */}
-                <div className="mb-4 p-4 bg-accent-light rounded-lg border-2 border-accent-primary/20">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 mt-1">
-                      <svg className="w-5 h-5 text-accent-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h4 className="font-semibold text-text-navy">AI-Powered Problem Detection</h4>
-                        <span className="px-2 py-0.5 bg-accent-primary text-white text-xs font-mono rounded">BETA</span>
-                      </div>
-                      <p className="text-sm text-text-secondary mb-3">
-                        Upload a photo and our AI will analyze the issue and suggest a description
-                      </p>
-                      
-                      <label className="inline-flex items-center gap-2 px-4 py-2 bg-white border-2 border-accent-primary text-accent-primary rounded-lg cursor-pointer hover:bg-accent-primary hover:text-white transition-colors">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <span className="font-medium text-sm">
-                          {uploadedImage ? 'Change Photo' : 'Upload Photo'}
-                        </span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleImageUpload}
-                          className="hidden"
-                        />
-                      </label>
-                      
-                      {aiAnalyzing && (
-                        <div className="mt-3 flex items-center gap-2 text-accent-primary">
-                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                          <span className="text-sm font-medium">AI analyzing image...</span>
-                        </div>
-                      )}
-                      
-                      {uploadedImage && !aiAnalyzing && (
-                        <div className="mt-3 flex items-center gap-2 text-green-600">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                          <span className="text-sm font-medium">AI analysis complete</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <textarea
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe the work needed (minimum 10 characters)"
-                  rows={4}
-                  className="w-full px-4 py-3 border-2 border-status-subtle rounded-lg focus:border-accent-primary focus:outline-none resize-none"
-                />
-                {description.length > 0 && description.length < 10 && (
-                  <p className="text-sm text-text-tertiary mt-2">
-                    {10 - description.length} more characters required
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-mono font-medium text-text-secondary mb-2">
-                  DELIVERY
-                </label>
-                <div className="flex items-center gap-3 text-accent-primary">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                  </svg>
-                  <span className="font-medium">Immediate Service</span>
-                </div>
-              </div>
-
-              <button
-                onClick={handleRequestService}
-                disabled={loading || description.length < 10}
-                className={`
-                  w-full py-4 rounded-xl font-semibold text-lg transition-all
-                  ${
-                    loading || description.length < 10
-                      ? 'bg-status-subtle text-text-tertiary cursor-not-allowed'
-                      : 'bg-accent-primary text-white hover:bg-accent-hover active:scale-[0.98]'
-                  }
-                `}
-              >
-                {loading ? 'Finding worker...' : 'Request Service Now'}
-              </button>
-            </div>
-          </Card>
-        </div>
-      </div>
-    );
+  if ((stage === 'dispatch' || stage === 'matched') && selectedService && dispatchResult) {
+    const worker = dispatchResult.matchedWorker;
+    return <main className="mx-auto flex min-h-screen max-w-4xl items-center px-5 py-10 md:px-10"><section className="w-full overflow-hidden rounded-[36px] border border-status-subtle bg-white p-6 md:p-12">{stage === 'dispatch' ? <><p className="font-mono text-[11px] font-semibold tracking-[0.16em] text-accent-primary">RULE-BASED DISPATCH · DEMO</p><h1 className="mt-4 text-4xl font-extrabold leading-[0.92] tracking-[-0.06em] text-text-navy md:text-6xl">Finding the right worker.</h1><p className="mt-5 max-w-xl text-text-secondary">Matching verified {selectedService.name.toLowerCase()} skills, availability, service radius and geographic distance.</p><div className="mt-10 space-y-3">{dispatchResult.steps.slice(0, 4).map((step, index) => <div key={step.step} className={`flex items-center justify-between rounded-2xl border px-5 py-4 transition-all duration-500 ${index < visibleStep ? 'border-accent-primary/20 bg-accent-light opacity-100' : 'border-status-subtle bg-background-primary opacity-45'}`}><div className="flex items-center gap-4"><span className={`flex h-7 w-7 items-center justify-center rounded-full font-mono text-[10px] ${index < visibleStep ? 'bg-accent-primary text-white' : 'bg-status-subtle text-text-secondary'}`}>{index < visibleStep ? <Check size={14} /> : step.step}</span><div><p className="font-semibold text-text-navy">{step.name}</p><p className="mt-0.5 text-xs text-text-secondary">{step.description}</p></div></div><span className="font-mono text-xs text-text-secondary">{index < visibleStep ? `${step.candidateCount} ELIGIBLE` : 'CHECKING'}</span></div>)}</div></> : <><p className="font-mono text-[11px] font-semibold tracking-[0.16em] text-accent-primary">WORKER FOUND</p><div className="mt-6 grid gap-6 md:grid-cols-[1fr_0.85fr] md:items-end"><div><h1 className="text-5xl font-extrabold leading-[0.88] tracking-[-0.07em] text-text-navy md:text-6xl">{worker.name.toUpperCase()}</h1><p className="mt-4 flex items-center gap-2 text-sm font-semibold text-text-secondary"><ShieldCheck size={18} className="text-accent-primary" /> VERIFIED COOPERATIVE WORKER</p><p className="mt-6 text-lg text-text-secondary">{selectedService.name} specialist · {worker.completedJobs} completed jobs · ★ {worker.rating}</p></div><div className={`relative min-h-[230px] overflow-hidden rounded-[28px] ${surfaceByService[selectedService.name]}`}><img src={illustrationByService[selectedService.name]} alt="" className="absolute bottom-[-11%] right-[3%] h-[108%] w-full object-contain" /></div></div><div className="mt-8 grid grid-cols-2 gap-3 border-y border-status-subtle py-6"><div><p className="font-mono text-[10px] tracking-[0.12em] text-text-secondary">DISTANCE</p><p className="mt-2 text-2xl font-extrabold tracking-[-0.04em]">{dispatchResult.distance.toFixed(1)} KM</p></div><div><p className="font-mono text-[10px] tracking-[0.12em] text-text-secondary">ETA</p><p className="mt-2 text-2xl font-extrabold tracking-[-0.04em]">{Math.max(dispatchResult.estimatedArrival, 8)} MIN</p></div></div><button onClick={() => navigate('/job/DEMO001', { state: { service: selectedService.name, worker, eta: Math.max(dispatchResult.estimatedArrival, 8) } })} className="mt-8 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-accent-primary px-6 py-4 text-sm font-semibold text-white transition hover:bg-accent-hover md:w-auto">TRACK WORKER <ArrowRight size={18} /></button></>}</section></main>;
   }
 
   return (
-    <div className="min-h-screen px-6 py-12 max-w-7xl mx-auto">
-      {/* Hero Section */}
-      <div className="text-center mb-16 space-y-4">
-        <h1 className="text-4xl lg:text-[3.5rem] font-extrabold text-text-navy leading-tight">
-          ShramSangam
-        </h1>
-        <p className="text-xl text-text-secondary">
-          Local skills. Shared opportunity.
-        </p>
-        <p className="text-sm font-mono text-text-tertiary tracking-wide">
-          COOPERATIVE SERVICE NETWORK
-        </p>
-      </div>
-
-      {/* Service Selection Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {services.map((service) => (
-          <Card
-            key={service.id}
-            variant="bento"
-            padding="lg"
-            interactive
-            onClick={() => handleServiceSelect(service.id)}
-          >
-            <div className="flex flex-col h-full">
-              <div className="space-y-4 flex-1">
-                <div className="text-text-navy">
-                  <Icon name={service.icon} size={48} strokeWidth={1.5} />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-extrabold text-text-navy mb-2">
-                    {service.name}
-                  </h3>
-                  <p className="text-text-secondary text-sm mb-4">
-                    {service.description}
-                  </p>
-                </div>
-                <div className="pt-4 border-t border-status-subtle space-y-1">
-                  <p className="text-sm text-text-tertiary">
-                    <span className="font-mono text-xs">AVG PRICE:</span> {service.avgPrice}
-                  </p>
-                  <p className="text-sm text-text-tertiary">
-                    <span className="font-mono text-xs">AVG TIME:</span> {service.avgDuration}
-                  </p>
-                </div>
-              </div>
-              
-              {/* Book Now Button */}
-              <div className="flex justify-end mt-4">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleServiceSelect(service.id);
-                  }}
-                  className="px-6 py-2 bg-accent-primary text-white rounded-full font-medium text-sm hover:bg-accent-hover transition-colors duration-200"
-                >
-                  Book Now
-                </button>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-    </div>
+    <main className="mx-auto max-w-[1400px] overflow-hidden px-4 pb-12 pt-6 sm:px-5 sm:pb-16 sm:pt-8 md:px-10 md:pt-14">
+      <section className="relative grid min-h-[400px] items-end overflow-hidden rounded-[28px] border border-status-subtle bg-white px-5 py-8 sm:min-h-[460px] sm:rounded-[32px] sm:px-6 sm:py-10 md:grid-cols-2 md:rounded-[36px] md:px-12 md:py-14">
+        <div className="relative z-10 max-w-xl"><p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-accent-primary sm:text-[10px] sm:tracking-[0.16em] md:text-[11px]">COOPERATIVE SERVICE NETWORK</p><h1 className="mt-4 text-[clamp(2.5rem,10vw,6.8rem)] font-extrabold leading-[0.83] tracking-[-0.075em] text-text-navy sm:mt-5 md:mt-6">LOCAL SKILLS.<br />SHARED OPPORTUNITY.</h1><p className="mt-5 max-w-sm text-sm leading-6 text-text-secondary sm:text-base sm:leading-6 md:mt-7">Find trusted cooperative workers for everyday services, right when you need them.</p><a href="#services" className="mt-6 inline-flex items-center gap-2 text-xs font-semibold text-accent-primary hover:gap-3 sm:text-sm md:mt-8"><span>EXPLORE SERVICES</span> <ArrowRight size={15} className="sm:h-[17px] sm:w-[17px]" /></a></div>
+        <div aria-hidden="true" className="pointer-events-none relative min-h-[220px] sm:min-h-[250px] md:min-h-[390px]"><div className="absolute inset-x-[4%] bottom-[-25%] h-[76%] rounded-t-full bg-[#eaf1f8]" /><img src="/illustrations/hero.png" alt="" className="absolute bottom-[-10%] right-[-10%] h-[108%] max-w-[92%] object-contain object-bottom sm:right-[-8%] sm:h-[114%] sm:max-w-[90%] md:right-[3%]" /><div className="absolute bottom-[14%] left-[2%] hidden rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm md:block"><p className="font-mono text-[9px] tracking-[0.12em] text-text-secondary">PUNE · DEMO NETWORK</p><p className="mt-1 text-sm font-semibold text-text-navy">186 workers available</p></div></div>
+        <div className="absolute bottom-5 right-5 hidden items-center gap-2 font-mono text-[9px] tracking-[0.11em] text-text-secondary sm:bottom-7 sm:right-7 sm:text-[10px] md:flex"><span className="h-2 w-2 rounded-full bg-accent-primary" /> VERIFIED COOPERATIVE NETWORK</div>
+      </section>
+      <section id="services" className="pt-14 sm:pt-20 md:pt-28"><div className="mb-6 flex items-end justify-between gap-6 sm:mb-9"><div><p className="font-mono text-[10px] font-semibold tracking-[0.14em] text-text-secondary sm:text-[11px] sm:tracking-[0.16em]">01</p><h2 className="mt-2.5 text-3xl font-extrabold tracking-[-0.06em] text-text-navy sm:mt-3 sm:text-4xl md:text-5xl">What do you need?</h2></div><p className="hidden max-w-xs text-right text-sm leading-5 text-text-secondary md:block">Every request is routed through a verified cooperative worker network.</p></div><div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">{services.map((service, index) => <ServiceCard key={service.id} service={service} index={index} onSelect={() => selectService(service.id)} />)}</div></section>
+      <section className="mt-10 grid gap-4 rounded-[24px] border border-status-subtle bg-white p-5 sm:mt-12 sm:gap-5 sm:rounded-[28px] sm:p-6 md:grid-cols-[1.35fr_1fr] md:rounded-[30px] md:p-9"><div><p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-accent-primary sm:text-[10px]">COOPERATIVE NETWORK</p><h2 className="mt-2.5 text-2xl font-extrabold tracking-[-0.05em] text-text-navy sm:mt-3 sm:text-3xl">Local workers. Shared trust.</h2><p className="mt-2.5 max-w-xl text-xs leading-6 text-text-secondary sm:mt-3 sm:text-sm">A simple service request connects you to verified workers from the Pune demonstration cooperative network.</p></div><div className="flex items-center gap-3 border-t border-status-subtle pt-4 sm:gap-4 sm:pt-5 md:border-l md:border-t-0 md:pl-8 md:pt-0"><div className="flex -space-x-2"><span className="h-8 w-8 rounded-full border-4 border-white bg-accent-primary sm:h-9 sm:w-9" /><span className="h-8 w-8 rounded-full border-4 border-white bg-[#d9d2c5] sm:h-9 sm:w-9" /><span className="h-8 w-8 rounded-full border-4 border-white bg-[#e0e4e7] sm:h-9 sm:w-9" /></div><p className="font-mono text-[9px] leading-5 tracking-[0.08em] text-text-secondary sm:text-[10px]">CUSTOMER → COOPERATIVE → VERIFIED WORKER</p></div></section>
+    </main>
   );
 }
