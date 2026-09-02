@@ -1,0 +1,30 @@
+/**
+ * Global Styles and Tailwind CSS Import
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base body styles */
+@layer base {
+  body {
+    @apply bg-background-primary text-text-primary font-body antialiased;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-text-navy font-extrabold leading-tight;
+  }
+  
+  /* Remove default button styles */
+  button {
+    @apply focus:outline-none;
+  }
+}
+
+/* Custom utility classes */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
