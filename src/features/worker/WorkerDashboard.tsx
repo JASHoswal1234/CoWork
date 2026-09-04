@@ -50,7 +50,7 @@ export function WorkerDashboard() {
           {/* Mobile: Vertical composition - Content zone above, illustration zone below */}
           <div className="flex flex-col md:hidden">
             {/* Content Zone */}
-            <div className="p-5 pb-6">
+            <div className="p-5">
               <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-text-secondary">
                 COOPERATIVE WORKER
               </p>
@@ -68,12 +68,12 @@ export function WorkerDashboard() {
                 </div>
               </div>
 
-              {/* Availability Control */}
+              {/* Availability Control - Below identity */}
               <div className="mt-5">
-                <div className="relative overflow-hidden rounded-2xl bg-white p-1.5 shadow-sm">
+                <div className="relative overflow-hidden rounded-xl bg-white p-1.5 shadow-sm">
                   {/* Sliding Background */}
                   <div 
-                    className={`absolute top-1.5 bottom-1.5 rounded-xl bg-accent-primary shadow-md transition-all duration-300 ease-out ${
+                    className={`absolute top-1.5 bottom-1.5 rounded-lg bg-accent-primary shadow-md transition-all duration-300 ease-out ${
                       available ? 'left-1.5 right-1/2 mr-0.5' : 'left-1/2 right-1.5 ml-0.5'
                     }`}
                   />
@@ -82,7 +82,7 @@ export function WorkerDashboard() {
                   <div className="relative grid grid-cols-2 gap-1">
                     <button
                       onClick={() => setAvailable(true)}
-                      className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-3 text-xs font-semibold transition-colors duration-300 ${
+                      className={`flex items-center justify-center gap-1.5 rounded-lg py-2.5 px-3 text-xs font-semibold transition-colors duration-300 ${
                         available ? 'text-white' : 'text-text-secondary'
                       }`}
                     >
@@ -96,7 +96,7 @@ export function WorkerDashboard() {
                     
                     <button
                       onClick={() => setAvailable(false)}
-                      className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-3 text-xs font-semibold transition-colors duration-300 ${
+                      className={`flex items-center justify-center gap-1.5 rounded-lg py-2.5 px-3 text-xs font-semibold transition-colors duration-300 ${
                         !available ? 'text-white' : 'text-text-secondary'
                       }`}
                     >
@@ -110,25 +110,25 @@ export function WorkerDashboard() {
                   </div>
                 </div>
                 {available && (
-                  <p className="mt-2.5 text-[10px] text-text-secondary">
+                  <p className="mt-2 text-[10px] text-text-secondary">
                     Receiving nearby service requests
                   </p>
                 )}
                 {!available && (
-                  <p className="mt-2.5 text-[10px] text-text-secondary">
+                  <p className="mt-2 text-[10px] text-text-secondary">
                     Not receiving new requests
                   </p>
                 )}
               </div>
             </div>
 
-            {/* Illustration Zone - Separate from content */}
-            <div className="relative h-[160px] overflow-hidden">
+            {/* Illustration Zone - Dedicated area with full artwork visible */}
+            <div className="relative h-[180px] overflow-hidden">
               <img 
                 src="/illustrations/worker-hero.png" 
                 alt="" 
-                className="absolute bottom-0 right-[-5%] h-[140%] w-auto"
-                style={{ objectFit: 'contain', objectPosition: 'bottom right' }}
+                className="absolute bottom-0 left-1/2 h-auto w-[85%] -translate-x-1/2"
+                style={{ objectFit: 'contain', objectPosition: 'bottom center' }}
               />
             </div>
           </div>

@@ -27,11 +27,21 @@ export interface DispatchStep {
 }
 
 /**
+ * Worker candidate with distance and ETA
+ */
+export interface WorkerCandidate {
+  worker: Worker;
+  distance: number;  // km
+  estimatedArrival: number;  // minutes
+}
+
+/**
  * Dispatch result with matched worker and steps
  */
 export interface DispatchResult {
   steps: DispatchStep[];
   matchedWorker: Worker;
+  candidates: WorkerCandidate[];  // Top 3 worker options for customer selection
   estimatedArrival: number;  // minutes
   matchMethod: 'geospatial-rules';  // NOT 'ai-matching'
   distance: number;  // km
@@ -138,14 +148,22 @@ export function dispatchWorker(
   });
   
   // Step 5: Nearest Match
-  // Select worker with minimum distance (pure distance-based, NOT rating)
-  const matchedWorker = sortedByDistance[0];
+  // Select top 3 workers for customer choice
+  const top3Workers = sortedByDistance.slice(0, 3);
+  const matchedWorker = top3Workers[0];
+  
+  // Create candidate list with distance and ETA for each
+  const candidates: WorkerCandidate[] = top3Workers.map(worker => ({
+    worker,
+    distance: worker.distance,
+    estimatedArrival: Math.ceil((worker.distance / 20) * 60)
+  }));
   
   steps.push({
     step: 5,
-    name: 'Worker Matched',
-    description: `${matchedWorker.name} - ${matchedWorker.distance.toFixed(1)} km away`,
-    candidateCount: 1,
+    name: 'Workers Found',
+    description: `${top3Workers.length} nearby workers available`,
+    candidateCount: top3Workers.length,
     duration: 500
   });
   
@@ -155,6 +173,7 @@ export function dispatchWorker(
   return {
     steps,
     matchedWorker,
+    candidates,
     estimatedArrival,
     matchMethod: 'geospatial-rules',
     distance: matchedWorker.distance

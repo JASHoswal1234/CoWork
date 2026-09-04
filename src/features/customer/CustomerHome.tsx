@@ -6,7 +6,7 @@ import { dispatchWorker, type DispatchResult } from '../../engines/dispatchEngin
 import type { ServiceRequest } from '../../types/job';
 import type { ServiceCategory } from '../../types/service';
 
-type CustomerStage = 'browse' | 'request' | 'dispatch' | 'matched';
+type CustomerStage = 'browse' | 'request' | 'dispatch' | 'select' | 'matched';
 
 const illustrationByService: Record<string, string> = {
   Plumbing: '/illustrations/plumber.png', Electrical: '/illustrations/electrician.png', Carpentry: '/illustrations/carpenter.png',
@@ -108,6 +108,7 @@ export function CustomerHome() {
   const [description, setDescription] = useState('');
   const [urgency, setUrgency] = useState<'normal' | 'urgent'>('normal');
   const [dispatchResult, setDispatchResult] = useState<DispatchResult | null>(null);
+  const [selectedWorkerIndex, setSelectedWorkerIndex] = useState<number>(0);
   const [visibleStep, setVisibleStep] = useState(0);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isDiagnosing, setIsDiagnosing] = useState(false);
@@ -115,7 +116,7 @@ export function CustomerHome() {
 
   useEffect(() => {
     if (stage !== 'dispatch' || !dispatchResult) return;
-    if (visibleStep >= dispatchResult.steps.length) { const reveal = window.setTimeout(() => setStage('matched'), 600); return () => window.clearTimeout(reveal); }
+    if (visibleStep >= dispatchResult.steps.length) { const reveal = window.setTimeout(() => setStage('select'), 600); return () => window.clearTimeout(reveal); }
     const timer = window.setTimeout(() => setVisibleStep(current => current + 1), 650);
     return () => window.clearTimeout(timer);
   }, [stage, dispatchResult, visibleStep]);
@@ -139,7 +140,9 @@ export function CustomerHome() {
     if (!selectedService || description.trim().length < 10) return;
     const eligibleWorker = workers.find(worker => worker.available && worker.skills.some(skill => skill.category === selectedService.name && skill.verified));
     if (!eligibleWorker) return;
-    const request: ServiceRequest = { serviceCategory: selectedService.name, serviceSubcategory: selectedService.subcategories[0]?.name || '', description: description.trim(), location: { address: 'Kothrud, Pune · DEMO', coordinates: eligibleWorker.location.coordinates }, immediate: true };
+    // Customer location: Delhi NCR area (coordinates match worker network region)
+    const customerLocation = { lat: 28.6139, lng: 77.2090 };
+    const request: ServiceRequest = { serviceCategory: selectedService.name, serviceSubcategory: selectedService.subcategories[0]?.name || '', description: description.trim(), location: { address: 'Kothrud, Pune · DEMO', coordinates: customerLocation }, immediate: true };
     try { setDispatchResult(dispatchWorker(request, workers)); setVisibleStep(0); setStage('dispatch'); } catch (error) { console.error('Mock dispatch error:', error); }
   };
 
@@ -158,9 +161,103 @@ export function CustomerHome() {
 
   if (stage === 'request' && selectedService) return <main className="mx-auto min-h-screen max-w-6xl px-5 py-8 md:px-10 md:py-14"><button onClick={() => setStage('browse')} className="mb-10 font-mono text-xs font-semibold tracking-[0.1em] text-text-secondary hover:text-accent-primary">← ALL SERVICES</button><div className="grid items-start gap-8 lg:grid-cols-[0.82fr_1.18fr]"><aside className={`relative min-h-[300px] overflow-hidden rounded-[32px] ${surfaceByService[selectedService.name]} p-7 lg:sticky lg:top-28`}><p className="font-mono text-[10px] font-semibold tracking-[0.16em] text-text-secondary">ON-DEMAND SERVICE</p><h1 className="mt-4 max-w-xs text-4xl font-extrabold leading-[0.92] tracking-[-0.06em] text-text-navy">{selectedService.name}, when you need it.</h1><img src={illustrationByService[selectedService.name]} alt="" className="absolute bottom-[-11%] right-[-8%] h-[64%] max-w-[62%] object-contain" /></aside><section className="rounded-[32px] border border-status-subtle bg-white p-6 md:p-10"><div className="mb-10 flex items-center gap-3 font-mono text-[10px] font-semibold tracking-[0.12em] text-text-secondary"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-primary text-white">1</span> DESCRIBE <span className="h-px w-8 bg-status-subtle" /> <span>2 MATCH</span></div><h2 className="text-3xl font-extrabold tracking-[-0.045em] text-text-navy md:text-4xl">Tell us what needs attention.</h2><p className="mt-3 max-w-lg text-text-secondary">We’ll use your request to find an available, verified cooperative worker nearby.</p><label htmlFor="problem" className="mt-9 block font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">DESCRIBE THE PROBLEM</label><textarea id="problem" value={description} onChange={event => setDescription(event.target.value)} placeholder="My kitchen sink is leaking." rows={5} className="mt-3 w-full resize-none rounded-2xl border border-status-subtle bg-background-primary px-4 py-4 text-base outline-none transition focus:border-accent-primary focus:bg-white" /><div className="mt-7 grid gap-6 sm:grid-cols-2"><div><p className="font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">LOCATION</p><div className="mt-3 flex items-center gap-3 rounded-2xl border border-status-subtle px-4 py-3 text-sm font-medium text-text-navy"><MapPin size={17} className="text-accent-primary" /> Kothrud, Pune <span className="ml-auto font-mono text-[9px] text-text-tertiary">DEMO</span></div></div><div><p className="font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">URGENCY</p><div className="mt-3 flex rounded-2xl bg-background-primary p-1">{(['normal', 'urgent'] as const).map(value => <button key={value} onClick={() => setUrgency(value)} className={`flex-1 rounded-xl py-2 text-xs font-semibold uppercase tracking-[0.08em] transition ${urgency === value ? 'bg-white text-accent-primary shadow-sm' : 'text-text-secondary'}`}>{value}</button>)}</div></div></div><button onClick={handleFindWorker} disabled={description.trim().length < 10} className="mt-10 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-accent-primary px-6 py-4 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-status-neutral md:w-auto">FIND A WORKER <ArrowRight size={18} /></button></section></div></main>;
 
-  if ((stage === 'dispatch' || stage === 'matched') && selectedService && dispatchResult) {
-    const worker = dispatchResult.matchedWorker;
-    return <main className="mx-auto flex min-h-screen max-w-4xl items-center px-5 py-10 md:px-10"><section className="w-full overflow-hidden rounded-[36px] border border-status-subtle bg-white p-6 md:p-12">{stage === 'dispatch' ? <><p className="font-mono text-[11px] font-semibold tracking-[0.16em] text-accent-primary">RULE-BASED DISPATCH · DEMO</p><h1 className="mt-4 text-4xl font-extrabold leading-[0.92] tracking-[-0.06em] text-text-navy md:text-6xl">Finding the right worker.</h1><p className="mt-5 max-w-xl text-text-secondary">Matching verified {selectedService.name.toLowerCase()} skills, availability, service radius and geographic distance.</p><div className="mt-10 space-y-3">{dispatchResult.steps.slice(0, 4).map((step, index) => <div key={step.step} className={`flex items-center justify-between rounded-2xl border px-5 py-4 transition-all duration-500 ${index < visibleStep ? 'border-accent-primary/20 bg-accent-light opacity-100' : 'border-status-subtle bg-background-primary opacity-45'}`}><div className="flex items-center gap-4"><span className={`flex h-7 w-7 items-center justify-center rounded-full font-mono text-[10px] ${index < visibleStep ? 'bg-accent-primary text-white' : 'bg-status-subtle text-text-secondary'}`}>{index < visibleStep ? <Check size={14} /> : step.step}</span><div><p className="font-semibold text-text-navy">{step.name}</p><p className="mt-0.5 text-xs text-text-secondary">{step.description}</p></div></div><span className="font-mono text-xs text-text-secondary">{index < visibleStep ? `${step.candidateCount} ELIGIBLE` : 'CHECKING'}</span></div>)}</div></> : <><p className="font-mono text-[11px] font-semibold tracking-[0.16em] text-accent-primary">WORKER FOUND</p><div className="mt-6 grid gap-6 md:grid-cols-[1fr_0.85fr] md:items-end"><div><h1 className="text-5xl font-extrabold leading-[0.88] tracking-[-0.07em] text-text-navy md:text-6xl">{worker.name.toUpperCase()}</h1><p className="mt-4 flex items-center gap-2 text-sm font-semibold text-text-secondary"><ShieldCheck size={18} className="text-accent-primary" /> VERIFIED COOPERATIVE WORKER</p><p className="mt-6 text-lg text-text-secondary">{selectedService.name} specialist · {worker.completedJobs} completed jobs · ★ {worker.rating}</p></div><div className={`relative min-h-[230px] overflow-hidden rounded-[28px] ${surfaceByService[selectedService.name]}`}><img src={illustrationByService[selectedService.name]} alt="" className="absolute bottom-[-11%] right-[3%] h-[108%] w-full object-contain" /></div></div><div className="mt-8 grid grid-cols-2 gap-3 border-y border-status-subtle py-6"><div><p className="font-mono text-[10px] tracking-[0.12em] text-text-secondary">DISTANCE</p><p className="mt-2 text-2xl font-extrabold tracking-[-0.04em]">{dispatchResult.distance.toFixed(1)} KM</p></div><div><p className="font-mono text-[10px] tracking-[0.12em] text-text-secondary">ETA</p><p className="mt-2 text-2xl font-extrabold tracking-[-0.04em]">{Math.max(dispatchResult.estimatedArrival, 8)} MIN</p></div></div><button onClick={() => navigate('/job/DEMO001', { state: { service: selectedService.name, worker, eta: Math.max(dispatchResult.estimatedArrival, 8) } })} className="mt-8 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-accent-primary px-6 py-4 text-sm font-semibold text-white transition hover:bg-accent-hover md:w-auto">TRACK WORKER <ArrowRight size={18} /></button></>}</section></main>;
+  // Worker Selection Screen - Customer chooses from top 3 candidates
+  if (stage === 'select' && selectedService && dispatchResult) {
+    return <main className="mx-auto flex min-h-screen max-w-5xl items-center px-5 py-10 md:px-10">
+      <section className="w-full overflow-hidden rounded-[36px] border border-status-subtle bg-white p-6 md:p-12">
+        <p className="font-mono text-[11px] font-semibold tracking-[0.16em] text-accent-primary">WORKERS FOUND</p>
+        <h1 className="mt-4 text-4xl font-extrabold leading-[0.92] tracking-[-0.06em] text-text-navy md:text-5xl">Choose your worker.</h1>
+        <p className="mt-5 max-w-2xl text-text-secondary">We found {dispatchResult.candidates.length} verified {selectedService.name.toLowerCase()} workers nearby. Select the one that works best for you.</p>
+        
+        <div className="mt-10 space-y-4">
+          {dispatchResult.candidates.map((candidate, index) => {
+            const isSelected = selectedWorkerIndex === index;
+            const isRecommended = index === 0;
+            return (
+              <button
+                key={candidate.worker.id}
+                onClick={() => setSelectedWorkerIndex(index)}
+                className={`group w-full text-left transition-all ${
+                  isSelected 
+                    ? 'rounded-2xl border-2 border-accent-primary bg-accent-light/30' 
+                    : 'rounded-2xl border border-status-subtle bg-white hover:border-accent-primary/40 hover:bg-accent-light/10'
+                }`}
+              >
+                <div className="p-5 md:p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4">
+                      {/* Worker Avatar */}
+                      <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-[#e8e5e0] text-xl md:h-16 md:w-16 md:text-2xl">
+                        🛠
+                      </div>
+                      
+                      {/* Worker Info */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xl font-extrabold tracking-[-0.04em] text-text-navy md:text-2xl">
+                            {candidate.worker.name}
+                          </h3>
+                          {isRecommended && (
+                            <span className="rounded-full bg-accent-primary px-2 py-0.5 font-mono text-[9px] font-bold tracking-[0.08em] text-white">
+                              NEAREST
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-text-secondary">
+                          <span>★ {candidate.worker.rating}</span>
+                          <span>·</span>
+                          <span>{candidate.worker.completedJobs} jobs</span>
+                          <span>·</span>
+                          <span className="flex items-center gap-1">
+                            <ShieldCheck size={14} className="text-accent-primary" />
+                            Cooperative Verified
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Distance & ETA */}
+                    <div className="flex flex-shrink-0 gap-6 text-right">
+                      <div>
+                        <p className="font-mono text-[9px] tracking-[0.12em] text-text-secondary">DISTANCE</p>
+                        <p className="mt-1 text-xl font-extrabold tracking-[-0.04em] text-text-navy">
+                          {candidate.distance.toFixed(1)} KM
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-mono text-[9px] tracking-[0.12em] text-text-secondary">ETA</p>
+                        <p className="mt-1 text-xl font-extrabold tracking-[-0.04em] text-accent-primary">
+                          {Math.max(candidate.estimatedArrival, 8)} MIN
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        
+        <button 
+          onClick={() => setStage('matched')} 
+          className="mt-8 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-accent-primary px-6 py-4 text-sm font-semibold text-white transition hover:bg-accent-hover md:w-auto"
+        >
+          BOOK {dispatchResult.candidates[selectedWorkerIndex].worker.name.split(' ')[0].toUpperCase()}
+          <ArrowRight size={18} />
+        </button>
+      </section>
+    </main>;
+  }
+
+  if (stage === 'matched' && selectedService && dispatchResult) {
+    const selectedCandidate = dispatchResult.candidates[selectedWorkerIndex];
+    const worker = selectedCandidate.worker;
+    return <main className="mx-auto flex min-h-screen max-w-4xl items-center px-5 py-10 md:px-10"><section className="w-full overflow-hidden rounded-[36px] border border-status-subtle bg-white p-6 md:p-12"><><p className="font-mono text-[11px] font-semibold tracking-[0.16em] text-accent-primary">WORKER BOOKED</p><div className="mt-6 grid gap-6 md:grid-cols-[1fr_0.85fr] md:items-end"><div><h1 className="text-5xl font-extrabold leading-[0.88] tracking-[-0.07em] text-text-navy md:text-6xl">{worker.name.toUpperCase()}</h1><p className="mt-4 flex items-center gap-2 text-sm font-semibold text-text-secondary"><ShieldCheck size={18} className="text-accent-primary" /> VERIFIED COOPERATIVE WORKER</p><p className="mt-6 text-lg text-text-secondary">{selectedService.name} specialist · {worker.completedJobs} completed jobs · ★ {worker.rating}</p></div><div className={`relative min-h-[230px] overflow-hidden rounded-[28px] ${surfaceByService[selectedService.name]}`}><img src={illustrationByService[selectedService.name]} alt="" className="absolute bottom-[-11%] right-[3%] h-[108%] w-full object-contain" /></div></div><div className="mt-8 grid grid-cols-2 gap-3 border-y border-status-subtle py-6"><div><p className="font-mono text-[10px] tracking-[0.12em] text-text-secondary">DISTANCE</p><p className="mt-2 text-2xl font-extrabold tracking-[-0.04em]">{selectedCandidate.distance.toFixed(1)} KM</p></div><div><p className="font-mono text-[10px] tracking-[0.12em] text-text-secondary">ETA</p><p className="mt-2 text-2xl font-extrabold tracking-[-0.04em]">{Math.max(selectedCandidate.estimatedArrival, 8)} MIN</p></div></div><button onClick={() => navigate('/job/DEMO001', { state: { service: selectedService.name, worker, eta: Math.max(selectedCandidate.estimatedArrival, 8) } })} className="mt-8 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-accent-primary px-6 py-4 text-sm font-semibold text-white transition hover:bg-accent-hover md:w-auto">TRACK WORKER <ArrowRight size={18} /></button></></section></main>;
+  }
+
+  if (stage === 'dispatch' && selectedService && dispatchResult) {
+    return <main className="mx-auto flex min-h-screen max-w-4xl items-center px-5 py-10 md:px-10"><section className="w-full overflow-hidden rounded-[36px] border border-status-subtle bg-white p-6 md:p-12"><><p className="font-mono text-[11px] font-semibold tracking-[0.16em] text-accent-primary">RULE-BASED DISPATCH · DEMO</p><h1 className="mt-4 text-4xl font-extrabold leading-[0.92] tracking-[-0.06em] text-text-navy md:text-6xl">Finding the right worker.</h1><p className="mt-5 max-w-xl text-text-secondary">Matching verified {selectedService.name.toLowerCase()} skills, availability, service radius and geographic distance.</p><div className="mt-10 space-y-3">{dispatchResult.steps.slice(0, 4).map((step, index) => <div key={step.step} className={`flex items-center justify-between rounded-2xl border px-5 py-4 transition-all duration-500 ${index < visibleStep ? 'border-accent-primary/20 bg-accent-light opacity-100' : 'border-status-subtle bg-background-primary opacity-45'}`}><div className="flex items-center gap-4"><span className={`flex h-7 w-7 items-center justify-center rounded-full font-mono text-[10px] ${index < visibleStep ? 'bg-accent-primary text-white' : 'bg-status-subtle text-text-secondary'}`}>{index < visibleStep ? <Check size={14} /> : step.step}</span><div><p className="font-semibold text-text-navy">{step.name}</p><p className="mt-0.5 text-xs text-text-secondary">{step.description}</p></div></div><span className="font-mono text-xs text-text-secondary">{index < visibleStep ? `${step.candidateCount} ELIGIBLE` : 'CHECKING'}</span></div>)}</div></></section></main>;
   }
 
   return (
