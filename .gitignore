@@ -31,7 +31,10 @@ coverage/
 .idea/
 *.swp
 *.swo
-.kiro
+
+# Kiro - ignore everything except specs
+.kiro/*
+!.kiro/specs/
 
 # OS files
 .DS_Store
