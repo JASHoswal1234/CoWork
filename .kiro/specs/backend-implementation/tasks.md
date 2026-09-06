@@ -14,7 +14,7 @@ This implementation plan breaks down the backend development into discrete, incr
 
 ### Phase 1: Core Infrastructure and Auth (Hours 0-8)
 
-- [ ] 1. Initialize project and setup development environment
+- [x] 1. Initialize project and setup development environment
   - Create Node.js + Express + TypeScript project structure
   - Install core dependencies: express, @supabase/supabase-js, dotenv, cors
   - Setup TypeScript configuration (tsconfig.json)
@@ -23,28 +23,28 @@ This implementation plan breaks down the backend development into discrete, incr
   - Setup basic server.ts with Express app and health check endpoint
   - _Requirements: 15.1, 15.2, 15.9_
 
-- [ ] 2. Setup database schema in Supabase
-  - [ ] 2.1 Enable PostGIS extension in Supabase SQL editor
+- [x] 2. Setup database schema in Supabase
+  - [x] 2.1 Enable PostGIS extension in Supabase SQL editor
     - Run: CREATE EXTENSION IF NOT EXISTS postgis;
     - _Requirements: 3.1, 14.2_
   
-  - [ ] 2.2 Create profiles table extending auth.users
+  - [x] 2.2 Create profiles table extending auth.users
     - Columns: id (FK to auth.users), role, name, phone, email, avatar_url, fcm_token, timestamps
     - Add CHECK constraint for role enum (customer, worker, admin)
     - _Requirements: 1.4, 14.1_
   
-  - [ ] 2.3 Create workers table with PostGIS location column
+  - [x] 2.3 Create workers table with PostGIS location column
     - Columns: id, user_id (FK), skills (text[]), status, is_available, current_location (GEOMETRY), service_radius_km, average_rating, total_reviews, wallet_balance, timestamps
     - Create GIST spatial index on current_location: CREATE INDEX idx_workers_location ON workers USING GIST(current_location);
     - Create index on availability: CREATE INDEX idx_workers_available ON workers(is_available) WHERE status = 'active';
     - _Requirements: 2.1, 3.1, 14.5, 14.6_
   
-  - [ ] 2.4 Create jobs table with location and status tracking
+  - [x] 2.4 Create jobs table with location and status tracking
     - Columns: id, customer_id (FK), worker_id (FK), service_type, status (enum), location (GEOMETRY), address, description, photos (text[]), scheduled_time, price_estimate, final_price, payment_status, timestamps (created_at, assigned_at, accepted_at, started_at, completed_at, verified_at)
     - Create indexes on customer_id, worker_id, status, and location (GIST)
     - _Requirements: 4.1, 14.1, 14.6_
   
-  - [ ] 2.5 Create supporting tables (reviews, transactions, payouts, notifications, worker_documents)
+  - [x] 2.5 Create supporting tables (reviews, transactions, payouts, notifications, worker_documents)
     - Reviews: id, job_id (FK, UNIQUE), customer_id (FK), worker_id (FK), rating, comment, worker_response, timestamps
     - Transactions: id, job_id (FK), razorpay_order_id, razorpay_payment_id, amount, worker_amount, cooperative_amount, status, refund_id, timestamps
     - Payouts: id, worker_id (FK), amount, razorpay_payout_id, status, bank_account_last4, timestamps
@@ -53,39 +53,39 @@ This implementation plan breaks down the backend development into discrete, incr
     - Create appropriate indexes on each table
     - _Requirements: 5.3, 6.1, 8.1, 12.3, 14.1_
   
-  - [ ] 2.6 Create PostgreSQL helper functions
+  - [x] 2.6 Create PostgreSQL helper functions
     - add_to_wallet(worker_id UUID, amount DECIMAL)
     - deduct_from_wallet(worker_id UUID, amount DECIMAL)
     - append_job_photo(job_id UUID, photo_url TEXT)
     - find_nearby_workers(lat FLOAT, lng FLOAT, service_type TEXT, radius_meters INT) - returns worker matches with distance
     - _Requirements: 3.1, 5.3, 14.8_
   
-  - [ ] 2.7 Create triggers for updated_at timestamps
+  - [x] 2.7 Create triggers for updated_at timestamps
     - Create update_updated_at() function
     - Apply triggers to profiles and workers tables
     - _Requirements: 14.1, 14.7_
 
-- [ ] 3. Implement authentication service using Supabase Auth
-  - [ ] 3.1 Create auth middleware for JWT validation
+- [x] 3. Implement authentication service using Supabase Auth
+  - [x] 3.1 Create auth middleware for JWT validation
     - Extract token from Authorization header
     - Validate token using supabase.auth.getUser()
     - Attach user object to req.user
     - Handle expired tokens with 401 response
     - _Requirements: 1.2, 1.3, 16.1_
   
-  - [ ] 3.2 Create role-based authorization middleware
+  - [x] 3.2 Create role-based authorization middleware
     - requireRole(allowedRoles: UserRole[]) middleware
     - Check user role from profiles table
     - Return 403 Forbidden if role not allowed
     - _Requirements: 1.5, 1.6, 1.7_
   
-  - [ ] 3.3 Implement registration endpoints
+  - [x] 3.3 Implement registration endpoints
     - POST /api/auth/register - Email/password registration with Supabase Auth
     - Create profile record with selected role
     - Return user object and JWT token
     - _Requirements: 1.1, 1.4_
   
-  - [ ] 3.4 Implement login and token management endpoints
+  - [x] 3.4 Implement login and token management endpoints
     - POST /api/auth/login - Login with email/password
     - POST /api/auth/refresh - Refresh JWT token
     - POST /api/auth/password/reset - Request password reset
@@ -101,7 +101,7 @@ This implementation plan breaks down the backend development into discrete, incr
   - **Property 2: Role-Based Access Control Enforcement**
   - **Validates: Requirements 1.5, 1.6, 1.7**
 
-- [ ] 4. Checkpoint - Test auth flow end-to-end
+- [x] 4. Checkpoint - Test auth flow end-to-end
   - Verify user can register, login, and access protected routes
   - Verify role-based restrictions work correctly
   - Test token expiration handling
