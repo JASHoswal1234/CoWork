@@ -41,14 +41,15 @@ router.post(
       const { email, password, phone, name, role } = req.body;
 
       // Register user with Supabase Auth
-      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
-        email_confirm: true, // Auto-confirm for hackathon
-        user_metadata: {
-          name,
-          phone,
-          role,
+        options: {
+          data: {
+            name,
+            phone,
+            role,
+          },
         },
       });
 
@@ -63,8 +64,19 @@ router.post(
         return;
       }
 
-      // Create user profile in database
-      const { data: profile, error: profileError } = await supabaseAdmin
+      if (!authData.user) {
+        res.status(500).json({
+          success: false,
+          error: {
+            code: 'REGISTRATION_FAILED',
+            message: 'User creation failed',
+          },
+        });
+        return;
+      }
+
+      // Create user profile in database (using anon key since service key format is different)
+      const { data: profile, error: profileError} = await supabase
         .from('users')
         .insert({
           id: authData.user.id,
@@ -72,15 +84,15 @@ router.post(
           phone,
           name,
           role,
-          phone_verified: true, // Auto-verify for hackathon
-          email_verified: true,
+          phone_verified: false,
+          email_verified: false,
         })
         .select()
         .single();
 
       if (profileError) {
-        // Cleanup: delete auth user if profile creation fails
-        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+        // Note: In production, you'd want to cleanup the auth user
+        console.error('Profile creation error:', profileError);
 
         res.status(500).json({
           success: false,
@@ -92,18 +104,25 @@ router.post(
         return;
       }
 
-      // Sign in to get session token
+      // Auto-login after registration
       const { data: sessionData, error: sessionError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (sessionError) {
-        res.status(500).json({
-          success: false,
-          error: {
-            code: 'SESSION_CREATION_FAILED',
-            message: 'User created but failed to create session',
+      if (sessionError || !sessionData.session) {
+        // User created but login failed - they can login manually
+        res.status(201).json({
+          success: true,
+          data: {
+            user: {
+              id: profile.id,
+              email: profile.email,
+              phone: profile.phone,
+              name: profile.name,
+              role: profile.role,
+            },
+            message: 'Registration successful. Please login.',
           },
         });
         return;

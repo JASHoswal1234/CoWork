@@ -3,6 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
+import testRoutes from './routes/test';
 
 // Load environment variables
 dotenv.config();
@@ -45,6 +46,7 @@ app.get('/api', (req: Request, res: Response) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/test', testRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
