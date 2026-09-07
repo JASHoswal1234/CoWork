@@ -9,23 +9,25 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRole, type Role } from '../../contexts/RoleContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { LogOut } from 'lucide-react';
 
 export function RoleSwitcher() {
-  const { role, switchRole } = useRole();
+  const { role } = useRole();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const roles: { value: Role; label: string }[] = [
-    { value: 'customer', label: 'Customer' },
-    { value: 'worker', label: 'Worker' },
-    { value: 'cooperative', label: 'Cooperative' }
-  ];
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-status-subtle/90 bg-background-primary/90 px-4 py-3 backdrop-blur sm:px-5 sm:py-4 md:px-10">
       <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2 sm:gap-4">
-        {/* Brand - Compact on mobile */}
-        <button 
-          onClick={() => navigate('/')} 
+        {/* Brand */}
+        <button
+          onClick={() => navigate('/')}
           className="min-w-0 flex-shrink text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-primary"
         >
           <span className="block truncate text-xs font-extrabold tracking-[-0.04em] text-text-navy sm:text-sm md:text-base">
@@ -35,27 +37,21 @@ export function RoleSwitcher() {
             LOCAL SKILLS. SHARED OPPORTUNITY.
           </span>
         </button>
-        
-        {/* Role Switcher - Compact segmented control */}
-        <nav aria-label="Demo role switcher" className="flex shrink-0 rounded-full border border-status-subtle bg-white p-0.5 sm:p-1">
-          {roles.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => { switchRole(value); navigate('/'); }}
-              className={`
-                whitespace-nowrap rounded-full px-2 py-1.5 text-[9px] font-mono font-semibold tracking-[0.04em] transition-all duration-200
-                sm:px-3 sm:py-2 sm:text-[10px] md:px-4 md:text-xs
-                ${
-                  role === value
-                    ? 'bg-accent-primary text-white shadow-sm'
-                    : 'text-text-secondary hover:text-text-navy hover:bg-status-subtle/50'
-                }
-              `}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
+
+        {/* Right side: user info + logout */}
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="hidden flex-col items-end sm:flex">
+            <span className="text-xs font-semibold text-text-navy">{user?.name || user?.email?.split('@')[0]}</span>
+            <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-accent-primary">{role}</span>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 rounded-full border border-status-subtle bg-white px-3 py-2 font-mono text-[10px] font-semibold text-text-secondary transition hover:border-accent-primary/30 hover:text-text-navy"
+          >
+            <LogOut size={13} />
+            <span className="hidden sm:block">LOGOUT</span>
+          </button>
+        </div>
       </div>
     </header>
   );

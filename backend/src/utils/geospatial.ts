@@ -93,13 +93,35 @@ export function validateCoordinates(lat: number, lng: number): boolean {
  * Example input: "POINT(77.2090 28.6139)" -> {lat: 28.6139, lng: 77.2090}
  */
 export function parsePostGISPoint(pointString: string): { lat: number; lng: number } | null {
-  const match = pointString.match(/POINT\(([^ ]+) ([^ ]+)\)/);
-  if (!match) return null;
-  
-  return {
-    lng: parseFloat(match[1]),
-    lat: parseFloat(match[2]),
-  };
+  if (!pointString || typeof pointString !== 'string') return null;
+
+  // Check for WKT POINT format: POINT(lng lat)
+  const match = pointString.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/i);
+  if (match) {
+    return {
+      lng: parseFloat(match[1]),
+      lat: parseFloat(match[2]),
+    };
+  }
+
+  // Check for PostGIS EWKB hex format (e.g. 0101000020E6100000...)
+  if (/^[0-9A-Fa-f]{50,}$/.test(pointString)) {
+    try {
+      const buf = Buffer.from(pointString, 'hex');
+      // In EWKB with SRID: byte 0 is endianness (1 = LE), bytes 1-4 geometry type, bytes 5-8 SRID
+      // bytes 9-16 is X (lng), bytes 17-24 is Y (lat)
+      const isLittleEndian = buf.readUInt8(0) === 1;
+      const lng = isLittleEndian ? buf.readDoubleLE(9) : buf.readDoubleBE(9);
+      const lat = isLittleEndian ? buf.readDoubleLE(17) : buf.readDoubleBE(17);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        return { lat, lng };
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  return null;
 }
 
 /**

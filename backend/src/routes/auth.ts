@@ -16,7 +16,7 @@ router.post(
     body('password')
       .isLength({ min: 6 })
       .withMessage('Password must be at least 6 characters'),
-    body('phone').isMobilePhone('any').withMessage('Valid phone number is required'),
+    body('phone').notEmpty().withMessage('Phone number is required'),
     body('name').trim().notEmpty().withMessage('Name is required'),
     body('role')
       .isIn(['customer', 'worker', 'admin'])
@@ -40,17 +40,12 @@ router.post(
 
       const { email, password, phone, name, role } = req.body;
 
-      // Register user with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Use admin API to create user - bypasses email rate limits
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
-        options: {
-          data: {
-            name,
-            phone,
-            role,
-          },
-        },
+        email_confirm: true, // Auto-confirm, no email sent
+        user_metadata: { name, phone, role },
       });
 
       if (authError) {
@@ -75,33 +70,69 @@ router.post(
         return;
       }
 
-      // Create user profile in database (using anon key since service key format is different)
-      const { data: profile, error: profileError} = await supabase
+      // Create user profile in database using service role key
+      // First check if profile already exists (in case of retry)
+      const { data: existingProfile } = await supabaseAdmin
         .from('users')
-        .insert({
-          id: authData.user.id,
-          email,
-          phone,
-          name,
-          role,
-          phone_verified: false,
-          email_verified: false,
-        })
-        .select()
+        .select('id')
+        .eq('id', authData.user.id)
         .single();
 
-      if (profileError) {
-        // Note: In production, you'd want to cleanup the auth user
-        console.error('Profile creation error:', profileError);
+      let profile;
+      if (existingProfile) {
+        // Profile already exists, just fetch it
+        const { data } = await supabaseAdmin
+          .from('users')
+          .select()
+          .eq('id', authData.user.id)
+          .single();
+        profile = data;
+      } else {
+        const { data, error: profileError } = await supabaseAdmin
+          .from('users')
+          .insert({
+            id: authData.user.id,
+            email,
+            phone: phone || null,
+            name,
+            role,
+            password_hash: 'supabase_auth',
+            phone_verified: false,
+            email_verified: true,
+          })
+          .select()
+          .single();
 
-        res.status(500).json({
-          success: false,
-          error: {
-            code: 'PROFILE_CREATION_FAILED',
-            message: 'Failed to create user profile',
-          },
-        });
-        return;
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+          await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+          res.status(500).json({
+            success: false,
+            error: {
+              code: 'PROFILE_CREATION_FAILED',
+              message: `Failed to create user profile: ${profileError.message}`,
+            },
+          });
+          return;
+        }
+        profile = data;
+      }
+
+      // If role is worker, auto-create pending worker profile
+      if (role === 'worker' && profile) {
+        const { data: existingWorker } = await supabaseAdmin
+          .from('workers').select('id').eq('user_id', profile.id).single();
+
+        if (!existingWorker) {
+          const { data: newWorker } = await supabaseAdmin
+            .from('workers')
+            .insert({ user_id: profile.id, verification_status: 'pending', available: false, rating: 0, total_ratings: 0, completed_jobs: 0 })
+            .select('id').single();
+
+          if (newWorker) {
+            await supabaseAdmin.from('worker_wallets').insert({ worker_id: newWorker.id, balance: 0, total_earned: 0, total_withdrawn: 0 });
+          }
+        }
       }
 
       // Auto-login after registration

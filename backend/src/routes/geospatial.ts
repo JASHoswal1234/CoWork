@@ -8,6 +8,7 @@ import {
   formatETA,
   validateCoordinates,
   createPostGISPoint,
+  parsePostGISPoint,
 } from '../utils/geospatial';
 import { authenticate, requireWorker } from '../middleware/auth';
 
@@ -111,7 +112,7 @@ async function fallbackWorkerSearch(
   lat: number,
   lng: number,
   serviceCategory: string,
-  radiusMeters: number
+  _radiusMeters: number
 ): Promise<any[]> {
   const { data: workers, error } = await supabase
     .from('workers')
@@ -124,6 +125,7 @@ async function fallbackWorkerSearch(
       total_ratings,
       completed_jobs,
       city,
+      location,
       user:users(name, phone),
       skills:worker_skills(category, subcategory, skill_level)
     `
@@ -140,20 +142,31 @@ async function fallbackWorkerSearch(
     )
   );
 
-  // Return all matching workers (no distance filter in fallback)
-  return matchingWorkers.map((w: any) => ({
-    worker_id: w.id,
-    user_id: w.user_id,
-    name: w.user?.name,
-    phone: w.user?.phone,
-    photo_url: w.photo_url,
-    rating: w.rating,
-    total_ratings: w.total_ratings,
-    completed_jobs: w.completed_jobs,
-    city: w.city,
-    skills: w.skills,
-    distance_meters: 5000, // Default 5km for fallback
-  }));
+  const results = matchingWorkers.map((w: any) => {
+    let distanceKm = 3.5;
+    if (w.location) {
+      const coords = parsePostGISPoint(w.location);
+      if (coords) {
+        distanceKm = calculateDistance(lat, lng, coords.lat, coords.lng);
+      }
+    }
+    return {
+      worker_id: w.id,
+      user_id: w.user_id,
+      name: w.user?.name,
+      phone: w.user?.phone,
+      photo_url: w.photo_url,
+      rating: w.rating,
+      total_ratings: w.total_ratings,
+      completed_jobs: w.completed_jobs,
+      city: w.city,
+      skills: w.skills,
+      distance_meters: Math.round(distanceKm * 1000),
+    };
+  });
+
+  results.sort((a: any, b: any) => a.distance_meters - b.distance_meters);
+  return results;
 }
 
 /**

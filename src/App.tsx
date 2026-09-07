@@ -6,9 +6,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { RoleSwitcher } from './components/layouts/RoleSwitcher';
 
 // Auth Pages
-import { CustomerAuth } from './features/auth/CustomerAuth';
-import { WorkerAuth } from './features/auth/WorkerAuth';
-import { CooperativeAuth } from './features/auth/CooperativeAuth';
+import { AuthLanding } from './features/auth/AuthLanding';
 
 // Customer Pages
 import { CustomerHome } from './features/customer/CustomerHome';
@@ -30,9 +28,7 @@ function AppRoutes() {
 
   // Show auth screen if not authenticated
   if (!isAuthenticated) {
-    if (role === 'worker') return <WorkerAuth onSuccess={() => {}} />;
-    if (role === 'cooperative') return <CooperativeAuth onSuccess={() => {}} />;
-    return <CustomerAuth onSuccess={() => {}} />;
+    return <AuthLanding />;
   }
 
   return (

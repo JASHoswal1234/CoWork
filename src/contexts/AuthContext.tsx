@@ -6,6 +6,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  demoLogin: (role: 'customer' | 'worker' | 'cooperative') => Promise<void>;
   logout: () => void;
   register: (data: any) => Promise<void>;
 }
@@ -22,6 +23,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await authApi.login(email, password);
       setToken(data.session.access_token);
       setStoredUser(data.user);
+      setUser(data.user);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const demoLogin = async (role: 'customer' | 'worker' | 'cooperative') => {
+    setIsLoading(true);
+    try {
+      const data = await authApi.demoLogin(role);
       setUser(data.user);
     } finally {
       setIsLoading(false);
@@ -53,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       isAuthenticated: !!user && !!getToken(),
       login,
+      demoLogin,
       logout,
       register,
     }}>

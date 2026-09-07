@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { body, query, validationResult } from 'express-validator';
 import { supabase } from '../config/supabase';
 import { authenticate, requireCustomer, requireWorker, requireAdmin } from '../middleware/auth';
-import { createPostGISPoint, calculateDistance, estimateETA } from '../utils/geospatial';
+import { createPostGISPoint, calculateDistance, estimateETA, parsePostGISPoint } from '../utils/geospatial';
 
 const router = Router();
 
@@ -10,7 +10,7 @@ const router = Router();
 const STATUS_TRANSITIONS: Record<string, string[]> = {
   pending: ['matched', 'cancelled'],
   matched: ['accepted', 'cancelled'],
-  accepted: ['in_progress', 'cancelled'],
+  accepted: ['in_progress', 'completed', 'cancelled'],
   in_progress: ['completed', 'cancelled'],
   completed: [],
   cancelled: [],
@@ -58,6 +58,7 @@ router.post(
         estimated_price,
         scheduled_at,
         problem_image_urls,
+        worker_id,
       } = req.body;
 
       // Get customer info
@@ -98,16 +99,49 @@ router.post(
         return;
       }
 
-      // Trigger async worker matching (don't await - return job immediately)
-      matchAndAssignWorker(job.id, location.lat, location.lng, service_category_name).catch(
-        console.error
-      );
+      // If customer explicitly selected a worker
+      if (worker_id) {
+        await supabase
+          .from('jobs')
+          .update({
+            worker_id,
+            status: 'matched',
+            assigned_at: new Date().toISOString(),
+          })
+          .eq('id', job.id);
+
+        await supabase
+          .from('workers')
+          .update({ available: false })
+          .eq('id', worker_id);
+
+        const { data: assignedWorker } = await supabase
+          .from('workers')
+          .select('user_id')
+          .eq('id', worker_id)
+          .single();
+
+        if (assignedWorker?.user_id) {
+          await supabase.from('notifications').insert({
+            user_id: assignedWorker.user_id,
+            title: 'New Job Request!',
+            message: `New ${service_category_name} request assigned. Tap to view.`,
+            type: 'job_request',
+            related_job_id: job.id,
+          });
+        }
+      } else {
+        // Trigger async worker matching (don't await - return job immediately)
+        matchAndAssignWorker(job.id, location.lat, location.lng, service_category_name).catch(
+          console.error
+        );
+      }
 
       res.status(201).json({
         success: true,
         data: {
           job,
-          message: 'Job created. Finding nearby workers...',
+          message: worker_id ? 'Job created and worker assigned.' : 'Job created. Finding nearby workers...',
         },
       });
     } catch (error) {
@@ -129,45 +163,82 @@ async function matchAndAssignWorker(
   lng: number,
   serviceCategory: string
 ): Promise<void> {
-  // Try PostGIS function first
   let workers: any[] = [];
 
-  const { data: postgisData } = await supabase.rpc('find_nearby_workers', {
-    p_lat: lat,
-    p_lng: lng,
-    p_service_category: serviceCategory,
-    p_radius_meters: 10000,
-  });
-
-  workers = postgisData || [];
-
-  // Expand to 25km if no match
-  if (workers.length === 0) {
-    const { data: expanded } = await supabase.rpc('find_nearby_workers', {
+  try {
+    const { data: postgisData, error } = await supabase.rpc('find_nearby_workers', {
       p_lat: lat,
       p_lng: lng,
       p_service_category: serviceCategory,
-      p_radius_meters: 25000,
+      p_radius_meters: 10000,
     });
-    workers = expanded || [];
+    if (!error && postgisData && postgisData.length > 0) {
+      workers = postgisData;
+    }
+  } catch (err) {
+    console.warn('PostGIS RPC failed, falling back to database query:', err);
+  }
+
+  // Fallback: Query available verified workers from database
+  if (workers.length === 0) {
+    const { data: dbWorkers } = await supabase
+      .from('workers')
+      .select(`
+        id,
+        user_id,
+        photo_url,
+        rating,
+        total_ratings,
+        completed_jobs,
+        city,
+        location,
+        user:users(name, phone),
+        skills:worker_skills(category, subcategory, skill_level)
+      `)
+      .eq('available', true)
+      .eq('verification_status', 'verified');
+
+    if (dbWorkers && dbWorkers.length > 0) {
+      const matchingWorkers = dbWorkers.filter((w: any) =>
+        w.skills?.some((s: any) => s.category.toLowerCase().includes(serviceCategory.toLowerCase()))
+      );
+
+      const scored = matchingWorkers.map((w: any) => {
+        let distanceKm = 4.0;
+        if (w.location) {
+          const coords = parsePostGISPoint(w.location);
+          if (coords) {
+            distanceKm = calculateDistance(lat, lng, coords.lat, coords.lng);
+          }
+        }
+        return {
+          worker_id: w.id,
+          user_id: w.user_id,
+          name: w.user?.name,
+          phone: w.user?.phone,
+          distance_km: distanceKm,
+          rating: w.rating || 4.8,
+        };
+      });
+
+      scored.sort((a: any, b: any) => a.distance_km - b.distance_km || b.rating - a.rating);
+      workers = scored;
+    }
   }
 
   if (workers.length === 0) {
-    // No workers found - update job status
-    await supabase
-      .from('jobs')
-      .update({ status: 'cancelled' })
-      .eq('id', jobId);
+    console.warn(`No workers found for job ${jobId}`);
     return;
   }
 
   const bestWorker = workers[0];
+  const assignedWorkerId = bestWorker.worker_id || bestWorker.id;
 
   // Assign job to worker
   await supabase
     .from('jobs')
     .update({
-      worker_id: bestWorker.worker_id,
+      worker_id: assignedWorkerId,
       status: 'matched',
       assigned_at: new Date().toISOString(),
     })
@@ -177,16 +248,18 @@ async function matchAndAssignWorker(
   await supabase
     .from('workers')
     .update({ available: false })
-    .eq('id', bestWorker.worker_id);
+    .eq('id', assignedWorkerId);
 
   // Create notification for worker
-  await supabase.from('notifications').insert({
-    user_id: bestWorker.user_id,
-    title: 'New Job Request!',
-    message: `New ${serviceCategory} job nearby. Tap to view details.`,
-    type: 'job_request',
-    related_job_id: jobId,
-  });
+  if (bestWorker.user_id) {
+    await supabase.from('notifications').insert({
+      user_id: bestWorker.user_id,
+      title: 'New Job Request!',
+      message: `New ${serviceCategory} job nearby. Tap to view details.`,
+      type: 'job_request',
+      related_job_id: jobId,
+    });
+  }
 }
 
 /**

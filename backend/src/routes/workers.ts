@@ -147,6 +147,77 @@ router.post(
 );
 
 /**
+ * GET /api/workers/profile/me
+ * Get current worker profile by logged in user
+ */
+router.get('/profile/me', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+    const { data: worker, error } = await supabase
+      .from('workers')
+      .select(`
+        *,
+        user:users(id, name, email, phone),
+        skills:worker_skills(category, subcategory, skill_level, verified)
+      `)
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !worker) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'WORKER_NOT_FOUND', message: 'Worker profile not found for current user' },
+      });
+      return;
+    }
+
+    res.json({ success: true, data: { worker } });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed to get profile' } });
+  }
+});
+
+/**
+ * GET /api/workers/profile/me
+ * Get current user's worker profile
+ */
+router.get('/profile/me', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+
+    const { data: worker, error } = await supabase
+      .from('workers')
+      .select(`
+        *,
+        user:users(id, name, email, phone),
+        skills:worker_skills(category, subcategory, skill_level, verified)
+      `)
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !worker) {
+      // Worker profile doesn't exist yet - return empty to trigger setup
+      res.status(404).json({
+        success: false,
+        error: {
+          code: 'WORKER_NOT_FOUND',
+          message: 'Worker profile not found for current user',
+        },
+      });
+      return;
+    }
+
+    res.json({ success: true, data: { worker } });
+  } catch (error) {
+    console.error('Get my worker profile error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to get worker profile' },
+    });
+  }
+});
+
+/**
  * GET /api/workers/:id
  * Get worker profile with skills and ratings
  */

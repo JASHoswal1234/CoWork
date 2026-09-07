@@ -25,8 +25,8 @@ BEGIN
   SELECT
     w.id AS worker_id,
     w.user_id,
-    u.name,
-    u.phone,
+    u.name::TEXT,
+    u.phone::TEXT,
     w.photo_url,
     w.rating,
     w.total_ratings,
@@ -35,7 +35,7 @@ BEGIN
       w.location::geography,
       ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography
     ) AS distance_meters,
-    w.city,
+    w.city::TEXT,
     (
       SELECT jsonb_agg(jsonb_build_object(
         'category', ws.category,

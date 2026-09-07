@@ -4,19 +4,67 @@
 
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, GraduationCap, MapPin, User, Users, Briefcase, DollarSign, Activity, ArrowRight } from 'lucide-react';
+import { TrendingUp, GraduationCap, MapPin, User, Users, Briefcase, DollarSign, Activity, ArrowRight, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { adminApi, jobsApi } from '../../lib/api';
+import { getToken } from '../../lib/api';
+
+const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 export function OperationsDashboard() {
   const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<any>(null);
   const [recentJobs, setRecentJobs] = useState<any[]>([]);
+  const [pendingWorkers, setPendingWorkers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [approving, setApproving] = useState<string | null>(null);
+
+  const fetchPendingWorkers = async () => {
+    try {
+      const token = getToken();
+      const res = await fetch(`${API}/api/admin/workers?status=pending&limit=10`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setPendingWorkers(data.data?.workers || []);
+    } catch { /* ignore */ }
+  };
+
+  const approveWorker = async (workerId: string) => {
+    setApproving(workerId);
+    try {
+      const token = getToken();
+      await fetch(`${API}/api/admin/workers/${workerId}/approve`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setPendingWorkers(p => p.filter(w => w.id !== workerId));
+    } catch (e) {
+      console.error('Approve failed', e);
+    } finally {
+      setApproving(null);
+    }
+  };
+
+  const rejectWorker = async (workerId: string) => {
+    setApproving(workerId);
+    try {
+      const token = getToken();
+      await fetch(`${API}/api/admin/workers/${workerId}/reject`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Does not meet requirements' }),
+      });
+      setPendingWorkers(p => p.filter(w => w.id !== workerId));
+    } catch { /* ignore */ } finally {
+      setApproving(null);
+    }
+  };
 
   useEffect(() => {
     Promise.all([
       adminApi.getDashboard().catch(() => null),
       jobsApi.list({ status: 'accepted', limit: 10 }).catch(() => ({ jobs: [] })),
+      fetchPendingWorkers(),
     ]).then(([dash, jobsData]) => {
       setDashboard(dash);
       setRecentJobs((jobsData as any)?.jobs || []);
@@ -300,6 +348,59 @@ export function OperationsDashboard() {
             </p>
           </div>
         </section>
+
+        {/* Pending Worker Approvals */}
+        {pendingWorkers.length > 0 && (
+          <section className="space-y-4">
+            <div className="flex items-center gap-3">
+              <Clock size={20} className="text-accent-primary" />
+              <div>
+                <p className="font-mono text-[10px] font-semibold tracking-[0.14em] text-text-secondary">PENDING APPROVALS</p>
+                <h2 className="text-2xl font-extrabold tracking-[-0.05em] text-text-navy">Worker Verification Queue</h2>
+              </div>
+              <span className="ml-auto rounded-full bg-accent-primary px-3 py-1 font-mono text-xs font-bold text-white">{pendingWorkers.length}</span>
+            </div>
+            <div className="space-y-3">
+              {pendingWorkers.map((worker: any) => (
+                <div key={worker.id} className="overflow-hidden rounded-[20px] border border-status-subtle bg-white p-4 sm:p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#fff3e0] text-xl">🛠</div>
+                      <div>
+                        <p className="font-semibold text-text-navy">{worker.user?.name || 'Unknown Worker'}</p>
+                        <p className="text-xs text-text-secondary">{worker.user?.email}</p>
+                        <p className="text-xs text-text-tertiary">{worker.user?.phone || 'No phone'}</p>
+                        {worker.skills?.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {worker.skills.slice(0, 3).map((s: any, i: number) => (
+                              <span key={i} className="rounded-full bg-accent-light/50 px-2 py-0.5 font-mono text-[9px] text-accent-primary">{s.category}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 sm:shrink-0">
+                      <button
+                        onClick={() => rejectWorker(worker.id)}
+                        disabled={approving === worker.id}
+                        className="flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                      >
+                        <XCircle size={14} /> Reject
+                      </button>
+                      <button
+                        onClick={() => approveWorker(worker.id)}
+                        disabled={approving === worker.id}
+                        className="flex items-center gap-1.5 rounded-xl bg-accent-primary px-4 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                      >
+                        <CheckCircle size={14} /> {approving === worker.id ? 'Processing...' : 'Approve'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Intelligence Action Cards - Mobile optimized */}
         <section className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">

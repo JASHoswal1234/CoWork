@@ -3,7 +3,7 @@
  * Centralizes all API calls and auth token management
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 // ─── Auth Token Management ───────────────────────────────────────────────────
 
@@ -18,6 +18,7 @@ export function setToken(token: string): void {
 export function clearToken(): void {
   localStorage.removeItem('sahakar_token');
   localStorage.removeItem('sahakar_user');
+  localStorage.removeItem('demo_worker_id');
 }
 
 export function getStoredUser(): any | null {
@@ -79,6 +80,22 @@ export const authApi = {
       body: JSON.stringify({ email, password }),
     }),
 
+  demoLogin: async (role: 'customer' | 'worker' | 'cooperative') => {
+    let email = 'customer@sahakar.org';
+    let password = 'demo123';
+    if (role === 'worker') {
+      email = 'rajesh@sahakar.org';
+      password = 'demo123';
+    } else if (role === 'cooperative') {
+      email = 'admin@cooperative.org';
+      password = 'admin123';
+    }
+    const data = await authApi.login(email, password);
+    setToken(data.session.access_token);
+    setStoredUser(data.user);
+    return data;
+  },
+
   me: () => request<{ user: any }>('/api/auth/me'),
 
   logout: () => request('/api/auth/logout', { method: 'POST' }),
@@ -88,6 +105,25 @@ export const authApi = {
 
 export const workersApi = {
   getById: (id: string) => request<{ worker: any }>(`/api/workers/${id}`),
+
+  getProfileMe: () => request<{ worker: any }>('/api/workers/profile/me'),
+
+  getProfileMe: () => request<{ worker: any }>('/api/workers/profile/me'),
+
+  create: (payload: {
+    skills: Array<{ category: string; subcategory?: string; skill_level?: string }>;
+    location: { lat: number; lng: number };
+    address: string;
+    city: string;
+    state?: string;
+    pincode?: string;
+    service_radius?: number;
+    photo_url?: string;
+  }) =>
+    request<{ worker: any }>('/api/workers', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
   updateLocation: (workerId: string, lat: number, lng: number) =>
     request(`/api/workers/${workerId}/location`, {
@@ -117,6 +153,7 @@ export const jobsApi = {
     address: string;
     location: { lat: number; lng: number };
     estimated_price: number;
+    worker_id?: string;
     problem_image_urls?: string[];
   }) => request<{ job: any }>('/api/jobs', {
     method: 'POST',
@@ -130,7 +167,7 @@ export const jobsApi = {
 
   getById: (id: string) => request<{ job: any }>(`/api/jobs/${id}`),
 
-  getStatus: (id: string) => request(`/api/jobs/${id}/status`),
+  getStatus: (id: string) => request<{ status: string; job?: any }>(`/api/jobs/${id}/status`),
 
   accept: (id: string) => request<{ job: any }>(`/api/jobs/${id}/accept`, { method: 'POST' }),
 
