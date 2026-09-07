@@ -2,9 +2,27 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Check, CircleHelp, MapPin, Phone, ShieldCheck, Clock, CheckCircle2 } from 'lucide-react';
 import { jobsApi, paymentsApi, reviewsApi, workersApi } from '../../lib/api';
+import { GoogleMap, type MapCoordinate } from '../../components/GoogleMap';
 
 type JobStage = 'active' | 'completed' | 'paid' | 'rated';
 const statusSteps = ['ACCEPTED', 'ON THE WAY', 'ARRIVED', 'SERVICE'];
+
+function parseCoordinate(value: any): MapCoordinate {
+  if (typeof value === 'string') {
+    const match = value.match(/POINT\s*\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\)/i);
+    if (match) return { lat: Number(match[2]), lng: Number(match[1]) };
+  }
+
+  if (value?.coordinates?.lat != null && value?.coordinates?.lng != null) {
+    return { lat: Number(value.coordinates.lat), lng: Number(value.coordinates.lng) };
+  }
+
+  if (value?.lat != null && value?.lng != null) {
+    return { lat: Number(value.lat), lng: Number(value.lng) };
+  }
+
+  return { lat: 18.5074, lng: 73.8077 };
+}
 
 export function LiveJob() {
   const { jobId } = useParams();
@@ -29,6 +47,11 @@ export function LiveJob() {
     rating: realWorker?.rating ? Number(realWorker.rating) : 4.88,
     completedJobs: realWorker?.completed_jobs || realWorker?.completedJobs || 167,
   };
+
+  const customerLocation: MapCoordinate = realJob?.customer_location
+    ? parseCoordinate(realJob.customer_location)
+    : { lat: 18.5074, lng: 73.8077 };
+  const workerLocation = realWorker?.location ? parseCoordinate(realWorker.location) : undefined;
 
   // Fetch real job from backend
   useEffect(() => {
@@ -256,20 +279,9 @@ export function LiveJob() {
       <div className="grid gap-5 sm:gap-6 lg:grid-cols-[1.1fr_.9fr]">
         <section className="overflow-hidden rounded-[24px] border border-status-subtle bg-white sm:rounded-[28px] md:rounded-[32px]">
           <div className="relative min-h-[260px] overflow-hidden bg-[#eaf1f8] sm:min-h-[300px]">
-            <div
-              className="absolute inset-0 opacity-60"
-              style={{ backgroundImage: 'radial-gradient(#174A8B 1px, transparent 1px)', backgroundSize: '22px 22px' }}
-            />
-            <div className="absolute left-[16%] top-[25%] h-[54%] w-[58%] -rotate-6 rounded-[38%] border-[10px] border-white/80" />
-            <div className="absolute bottom-[21%] left-[23%] flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1.5 text-[10px] font-semibold shadow-sm sm:gap-2 sm:px-3 sm:py-2 sm:text-xs">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-primary sm:h-2 sm:w-2" />
-              YOU · KOTHRUD, PUNE
-            </div>
-            <div className="absolute right-[21%] top-[22%] flex h-10 w-10 items-center justify-center rounded-full border-4 border-white bg-accent-primary text-white shadow-lg sm:h-12 sm:w-12">
-              ●
-            </div>
+            <GoogleMap customer={customerLocation} worker={workerLocation} workerLabel={worker.name} />
             <div className="absolute bottom-5 left-5 flex items-center gap-1.5 font-mono text-[9px] tracking-[0.1em] text-text-secondary sm:bottom-7 sm:left-7 sm:gap-2 sm:text-[10px]">
-              <MapPin size={12} className="text-accent-primary sm:h-[14px] sm:w-[14px]" /> GEOSPATIAL LIVE TRACKING
+              <MapPin size={12} className="text-accent-primary sm:h-[14px] sm:w-[14px]" /> GOOGLE MAPS LIVE TRACKING
             </div>
           </div>
 

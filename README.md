@@ -59,6 +59,10 @@ SAHAKAR // SERVICES is a cooperative service platform with three distinct role-b
 # Install dependencies
 npm install
 
+# Configure Google Maps and the local API
+cp .env.example .env
+# Set VITE_GOOGLE_MAPS_API_KEY in .env
+
 # Start development server
 npm run dev
 
@@ -70,6 +74,11 @@ npm run preview
 ```
 
 The app will open at `http://localhost:3000`
+
+The live job screen at `/job/:jobId` uses Google Maps when
+`VITE_GOOGLE_MAPS_API_KEY` is configured. Enable the Maps JavaScript API for
+the key and restrict it to your local and production web origins. Without a
+key, the screen displays a setup message instead of failing.
 
 ## 🎨 Design System
 
