@@ -146,67 +146,100 @@ export function AuthLanding() {
           <p className="font-mono text-[10px] font-semibold tracking-[0.16em] text-text-tertiary">WHO ARE YOU?</p>
           <h2 className="mt-3 text-3xl font-extrabold tracking-[-0.05em] text-text-navy sm:text-4xl">Choose your experience.</h2>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-3 sm:gap-5">
+          <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-3 lg:gap-6">
             {/* Customer */}
-            <button onClick={() => go('customer-auth', 'customer')}
-              className="group relative min-h-[280px] overflow-hidden rounded-[24px] bg-[#e3f2fd] border border-black/5 p-6 text-left transition-all hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(18,18,18,0.10)] sm:min-h-[320px] sm:rounded-[28px] sm:p-7">
-              <img src="/illustrations/hero.png" alt=""
-                className="pointer-events-none absolute bottom-[-8%] right-[-10%] h-[85%] w-auto max-w-none opacity-80 transition-transform duration-500 group-hover:scale-105"
-                style={{ objectFit: 'contain', objectPosition: 'bottom right' }}
-              />
-              <div className="relative z-10 flex h-full flex-col justify-between">
-                <div>
-                  <div className="inline-flex items-center justify-center rounded-2xl bg-white/80 p-3">
-                    <User size={22} className="text-accent-primary" />
-                  </div>
-                  <h3 className="mt-4 text-2xl font-extrabold tracking-[-0.05em] text-text-navy sm:text-3xl">Customer</h3>
-                  <p className="mt-2 text-sm text-text-secondary">Book verified home services on demand</p>
+            <button
+              onClick={() => go('customer-auth', 'customer')}
+              className="group flex flex-col justify-between overflow-hidden rounded-[24px] sm:rounded-[28px] bg-[#e3f2fd] border border-black/5 p-6 sm:p-7 text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(18,18,18,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
+            >
+              {/* Content Region */}
+              <div className="flex flex-col">
+                <div className="inline-flex w-fit items-center justify-center rounded-2xl bg-white/90 p-3 shadow-sm">
+                  <User size={22} className="text-accent-primary" />
                 </div>
-                <span className="mt-auto inline-flex items-center gap-1.5 pt-8 text-xs font-semibold text-accent-primary transition-transform group-hover:translate-x-1">
-                  Get Started <ArrowRight size={14} />
-                </span>
+                <h3 className="mt-4 text-2xl sm:text-[26px] font-extrabold tracking-[-0.04em] text-text-navy">
+                  Customer
+                </h3>
+                <p className="mt-2 text-sm font-medium leading-relaxed text-[#2c3e50]">
+                  Book verified home services on demand
+                </p>
+                <div className="mt-5 inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-accent-primary transition-all group-hover:translate-x-1">
+                  Get Started <ArrowRight size={15} strokeWidth={2.5} />
+                </div>
+              </div>
+
+              {/* Illustration Region */}
+              <div className="mt-6 flex h-36 sm:h-40 md:h-44 w-full items-end justify-end overflow-hidden">
+                <img
+                  src="/illustrations/hero.png"
+                  alt=""
+                  aria-hidden
+                  className="pointer-events-none h-full w-auto max-w-[85%] object-contain object-bottom-right opacity-90 transition-transform duration-500 group-hover:scale-105"
+                />
               </div>
             </button>
 
             {/* Worker */}
-            <button onClick={() => go('worker-auth', 'worker')}
-              className="group relative min-h-[280px] overflow-hidden rounded-[24px] bg-[#fff3e0] border border-black/5 p-6 text-left transition-all hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(18,18,18,0.10)] sm:min-h-[320px] sm:rounded-[28px] sm:p-7">
-              <img src="/illustrations/worker-hero.png" alt=""
-                className="pointer-events-none absolute bottom-[-8%] right-[-10%] h-[85%] w-auto max-w-none opacity-80 transition-transform duration-500 group-hover:scale-105"
-                style={{ objectFit: 'contain', objectPosition: 'bottom right' }}
-              />
-              <div className="relative z-10 flex h-full flex-col justify-between">
-                <div>
-                  <div className="inline-flex items-center justify-center rounded-2xl bg-white/80 p-3">
-                    <Briefcase size={22} className="text-accent-primary" />
-                  </div>
-                  <h3 className="mt-4 text-2xl font-extrabold tracking-[-0.05em] text-text-navy sm:text-3xl">Worker</h3>
-                  <p className="mt-2 text-sm text-text-secondary">Join the cooperative, find jobs, earn fairly</p>
+            <button
+              onClick={() => go('worker-auth', 'worker')}
+              className="group flex flex-col justify-between overflow-hidden rounded-[24px] sm:rounded-[28px] bg-[#fff3e0] border border-black/5 p-6 sm:p-7 text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(18,18,18,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
+            >
+              {/* Content Region */}
+              <div className="flex flex-col">
+                <div className="inline-flex w-fit items-center justify-center rounded-2xl bg-white/90 p-3 shadow-sm">
+                  <Briefcase size={22} className="text-accent-primary" />
                 </div>
-                <span className="mt-auto inline-flex items-center gap-1.5 pt-8 text-xs font-semibold text-accent-primary transition-transform group-hover:translate-x-1">
-                  Join Network <ArrowRight size={14} />
-                </span>
+                <h3 className="mt-4 text-2xl sm:text-[26px] font-extrabold tracking-[-0.04em] text-text-navy">
+                  Worker
+                </h3>
+                <p className="mt-2 text-sm font-medium leading-relaxed text-[#2c3e50]">
+                  Join the cooperative, find jobs, earn fairly
+                </p>
+                <div className="mt-5 inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-accent-primary transition-all group-hover:translate-x-1">
+                  Join Network <ArrowRight size={15} strokeWidth={2.5} />
+                </div>
+              </div>
+
+              {/* Illustration Region */}
+              <div className="mt-6 flex h-36 sm:h-40 md:h-44 w-full items-end justify-end overflow-hidden">
+                <img
+                  src="/illustrations/worker-hero.png"
+                  alt=""
+                  aria-hidden
+                  className="pointer-events-none h-full w-auto max-w-[85%] object-contain object-bottom-right opacity-90 transition-transform duration-500 group-hover:scale-105"
+                />
               </div>
             </button>
 
             {/* Cooperative */}
-            <button onClick={() => go('cooperative-auth', 'cooperative')}
-              className="group relative min-h-[280px] overflow-hidden rounded-[24px] bg-[#eaf1f8] border border-black/5 p-6 text-left transition-all hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(18,18,18,0.10)] sm:min-h-[320px] sm:rounded-[28px] sm:p-7">
-              <img src="/illustrations/cooperative-hero.png" alt=""
-                className="pointer-events-none absolute bottom-[-8%] right-[-10%] h-[85%] w-auto max-w-none opacity-70 transition-transform duration-500 group-hover:scale-105"
-                style={{ objectFit: 'contain', objectPosition: 'bottom right' }}
-              />
-              <div className="relative z-10 flex h-full flex-col justify-between">
-                <div>
-                  <div className="inline-flex items-center justify-center rounded-2xl bg-white/80 p-3">
-                    <Shield size={22} className="text-accent-primary" />
-                  </div>
-                  <h3 className="mt-4 text-2xl font-extrabold tracking-[-0.05em] text-text-navy sm:text-3xl">Cooperative</h3>
-                  <p className="mt-2 text-sm text-text-secondary">Admin portal — manage workers and operations</p>
+            <button
+              onClick={() => go('cooperative-auth', 'cooperative')}
+              className="group flex flex-col justify-between overflow-hidden rounded-[24px] sm:rounded-[28px] bg-[#eaf1f8] border border-black/5 p-6 sm:p-7 text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(18,18,18,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
+            >
+              {/* Content Region */}
+              <div className="flex flex-col">
+                <div className="inline-flex w-fit items-center justify-center rounded-2xl bg-white/90 p-3 shadow-sm">
+                  <Shield size={22} className="text-accent-primary" />
                 </div>
-                <span className="mt-auto inline-flex items-center gap-1.5 pt-8 text-xs font-semibold text-accent-primary transition-transform group-hover:translate-x-1">
-                  Admin Login <ArrowRight size={14} />
-                </span>
+                <h3 className="mt-4 text-2xl sm:text-[26px] font-extrabold tracking-[-0.04em] text-text-navy">
+                  Cooperative
+                </h3>
+                <p className="mt-2 text-sm font-medium leading-relaxed text-[#2c3e50]">
+                  Admin portal — manage workers and operations
+                </p>
+                <div className="mt-5 inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-accent-primary transition-all group-hover:translate-x-1">
+                  Admin Login <ArrowRight size={15} strokeWidth={2.5} />
+                </div>
+              </div>
+
+              {/* Illustration Region */}
+              <div className="mt-6 flex h-36 sm:h-40 md:h-44 w-full items-end justify-end overflow-hidden">
+                <img
+                  src="/illustrations/cooperative-hero.png"
+                  alt=""
+                  aria-hidden
+                  className="pointer-events-none h-full w-auto max-w-[85%] object-contain object-bottom-right opacity-85 transition-transform duration-500 group-hover:scale-105"
+                />
               </div>
             </button>
           </div>
