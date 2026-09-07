@@ -1,17 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Check, ShieldCheck, AlertCircle, RefreshCw } from 'lucide-react';
-import { useMockData } from '../../contexts/MockDataContext';
-import { dispatchWorker, type DispatchResult } from '../../engines/dispatchEngine';
-import { useLocation } from '../../hooks/useLocation';
-import { LocationPermission } from '../../components/LocationPermission';
-import type { ServiceRequest } from '../../types/job';
 import type { ServiceCategory, ServiceSubcategory } from '../../types/service';
 import { ServiceSelection } from './ServiceSelection';
 import { ServiceDetails } from './ServiceDetails';
 import { BookingForm } from './BookingForm';
 import { servicesApi, workersApi, jobsApi, mlApi } from '../../lib/api';
-import { adaptServiceCategory } from '../../lib/apiAdapters';
 
 type CustomerStage = 'browse' | 'services' | 'details' | 'request' | 'dispatch' | 'select' | 'matched';
 
@@ -114,7 +108,6 @@ function ServiceCard({ service, index, onSelect }: { service: ServiceCategory; i
 }
 
 export function CustomerHome() {
-  const { workers } = useMockData(); // keep workers for mock fallback only
   const navigate = useNavigate();
   const [stage, setStage] = useState<CustomerStage>('browse');
 
@@ -175,7 +168,6 @@ export function CustomerHome() {
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [urgency, setUrgency] = useState<'normal' | 'urgent'>('normal');
-  const [dispatchResult, setDispatchResult] = useState<DispatchResult | null>(null);
   const [selectedWorkerIndex, setSelectedWorkerIndex] = useState<number>(0);
   const [visibleStep, setVisibleStep] = useState(0);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -305,43 +297,15 @@ export function CustomerHome() {
     setVisibleStep(1);
     setStage('dispatch');
 
-    // Customer Location: use real GPS if available, fallback to Kothrud Pune
-    const searchLocation = customerLocation;
-    // Prefer the exact selected service; fall back to the category name.
+    // PHASE 2A: Use real customer GPS location (not hardcoded mock coordinates)
+    const searchLocation = customerLocation; // Already captured from browser GPS or fallback
     const searchTerm = selectedService.name;
-    const subcategoryName = selectedSubcategory?.name || selectedService.subcategories[0]?.name || '';
-
-    const buildLocalFallback = (): CandidateDisplay[] => {
-      try {
-        const request: ServiceRequest = {
-          serviceCategory: selectedService.name,
-          serviceSubcategory: subcategoryName,
-          description: description.trim(),
-          location: { address: 'Kothrud, Pune', coordinates: customerLocation },
-          immediate: true,
-        };
-        const mockResult = dispatchWorker(request, workers);
-        setDispatchResult(mockResult);
-        return mockResult.candidates.map((c) => ({
-          id: c.worker.id,
-          name: c.worker.name,
-          rating: c.worker.rating,
-          completedJobs: c.worker.completedJobs,
-          distanceKm: c.distance,
-          etaMinutes: c.estimatedArrival,
-          photoUrl: illustrationByService[selectedService.name],
-          city: 'Pune',
-        }));
-      } catch {
-        // Local dispatch can legitimately find nobody; treat as empty, not an error.
-        return [];
-      }
-    };
 
     try {
+      // PHASE 2A: Real backend PostGIS worker search
       const res = await workersApi.searchNearby(
-        customerLocation.lat,
-        customerLocation.lng,
+        searchLocation.lat,
+        searchLocation.lng,
         searchTerm
       );
 
@@ -361,11 +325,15 @@ export function CustomerHome() {
         }));
         setCandidates(mappedCandidates);
       } else {
-        setCandidates(buildLocalFallback());
+        // No workers found - this is a real scenario, not an error
+        setCandidates([]);
       }
     } catch (err) {
-      console.error('Worker search failed, using local dispatch:', err);
-      setCandidates(buildLocalFallback());
+      console.error('Worker search failed:', err);
+      // PHASE 2A: Do NOT fall back to mock data
+      // Show clear error instead
+      setCandidates([]);
+      setSearchError('Unable to search for workers. Please check your connection and try again.');
     }
   };
 
@@ -380,19 +348,27 @@ export function CustomerHome() {
     setBookingError(null);
 
     const chosen = candidates[selectedWorkerIndex];
-    const customerLocation = { lat: 18.5074, lng: 73.8077 };
+    
+    // PHASE 2A: Use real customer GPS location (not hardcoded)
+    // This location was already captured in the component state from browser geolocation
+    const realCustomerLocation = customerLocation; // { lat, lng } already set from GPS or fallback
+    
     // Use the selected service's minimum price as the starting estimate.
-    const price = startingEstimate > 0 ? startingEstimate : selectedService.subcategories[0]?.priceRange.min ?? 0;
+    const price = startingEstimate > 0 ? startingEstimate : selectedService.subcategories[0]?.priceRange.min ?? 500;
 
     try {
+      // PHASE 2A: Real backend job creation
+      // Backend expects: { location: { lat, lng }, address, ...}
+      // Backend will create PostGIS POINT(lng lat) from lat/lng
       const res = await jobsApi.create({
         service_category_name: selectedService.name,
         service_subcategory_name: selectedSubcategory?.name,
         description: description.trim() || `${selectedService.name} service request`,
-        address: 'Kothrud, Pune',
-        location: customerLocation,
+        address: customerAddress, // Use captured address from GPS
+        location: realCustomerLocation, // { lat, lng }
         estimated_price: price,
-        worker_id: chosen.id,
+        worker_id: chosen.id, // Selected worker from search results
+        problem_image_urls: uploadedImage ? [uploadedImage] : [],
       });
 
       const jobId = res?.job?.id;
@@ -403,13 +379,15 @@ export function CustomerHome() {
         setStage('matched');
       } else {
         setBookingError(
-          'Booking could not be confirmed: the server did not return a job reference. Please try again.'
+          'Unable to create your request. The server did not return a job reference. Please try again.'
         );
       }
     } catch (err: any) {
       console.error('Job creation API error:', err);
       // Surface the exact backend error message; never fake a successful booking.
-      setBookingError(err?.message || 'Job creation failed. Please try again.');
+      setBookingError(
+        err?.message || 'Unable to create your request. Please check your connection and try again.'
+      );
     } finally {
       setIsBooking(false);
     }

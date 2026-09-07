@@ -1,5 +1,16 @@
--- Run this in Supabase SQL Editor
--- Creates the PostGIS function for finding nearby available workers
+-- Apply PostGIS Function Type Fix
+-- This updates the find_nearby_workers function to match actual database column types
+-- 
+-- CHANGES:
+-- - name: TEXT → VARCHAR(255) (matches users.name)
+-- - phone: TEXT → VARCHAR(15) (matches users.phone)
+-- - photo_url: TEXT → VARCHAR(500) (matches workers.photo_url)
+-- - city: TEXT → VARCHAR(100) (matches workers.city)
+-- - Removed unnecessary ::TEXT casts in SELECT
+--
+-- This fixes PostgreSQL error 42804: "Returned type character varying does not match expected type text"
+
+DROP FUNCTION IF EXISTS find_nearby_workers(FLOAT, FLOAT, TEXT, INT);
 
 CREATE OR REPLACE FUNCTION find_nearby_workers(
   p_lat FLOAT,

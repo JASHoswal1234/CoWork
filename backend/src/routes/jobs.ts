@@ -85,7 +85,6 @@ router.post(
           is_immediate: !scheduled_at,
           problem_image_urls: problem_image_urls || [],
           status: 'pending',
-          payment_status: 'pending',
         })
         .select()
         .single();
