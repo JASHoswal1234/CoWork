@@ -46,10 +46,29 @@ export function LiveJob() {
     rating: realWorker?.rating ? Number(realWorker.rating) : 4.88,
     completedJobs: realWorker?.completed_jobs || realWorker?.completedJobs || 167,
   };
-  const customerLocation: MapCoordinate = realJob?.customer_location
-    ? parseCoordinate(realJob.customer_location)
-    : { lat: 18.5074, lng: 73.8077 };
-  const workerLocation = realWorker?.location ? parseCoordinate(realWorker.location) : undefined;
+  // Priority: real job location from DB → GPS passed via nav state → browser GPS → Kothrud fallback
+  const [browserLocation, setBrowserLocation] = useState<MapCoordinate | null>(null);
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setBrowserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {},
+        { timeout: 5000 }
+      );
+    }
+  }, []);
+
+  const customerLocation: MapCoordinate =
+    (realJob?.customer_location ? parseCoordinate(realJob.customer_location) : null) ||
+    (state?.customerLocation as MapCoordinate | undefined) ||
+    browserLocation ||
+    { lat: 18.5074, lng: 73.8077 };
+
+  const workerLocation: MapCoordinate | undefined = realWorker?.location
+    ? parseCoordinate(realWorker.location)
+    : state?.worker?.lat != null
+    ? { lat: state.worker.lat, lng: state.worker.lng }
+    : undefined;
 
   // Fetch real job from backend
   useEffect(() => {

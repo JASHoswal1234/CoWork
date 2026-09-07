@@ -624,6 +624,7 @@ export function CustomerHome() {
                   eta: Math.max(chosen.etaMinutes, 6),
                   jobId: createdJobId,
                   price: startingEstimate,
+                  customerLocation,
                 },
               })
             }
