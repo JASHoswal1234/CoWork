@@ -52,7 +52,7 @@ export function NotificationToast() {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 max-w-[380px] w-[calc(100vw-40px)] animate-in slide-in-from-bottom-5 fade-in duration-200">
+    <div className="fixed top-20 right-4 sm:top-24 sm:right-6 z-50 max-w-[380px] w-[calc(100vw-32px)] animate-in slide-in-from-top-4 fade-in duration-200">
       <div className="flex flex-col gap-2.5 rounded-2xl border border-status-subtle bg-white p-4 shadow-2xl ring-1 ring-black/5">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-light border border-status-subtle shadow-xs">

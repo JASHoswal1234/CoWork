@@ -21,8 +21,15 @@ router.get('/stream', authenticate, (req: Request, res: Response): void => {
   // Send initial connection event
   res.write(`data: ${JSON.stringify({ type: 'CONNECTED', user_id: userId })}\n\n`);
 
-  // Register client
+  // Register client for user and all linked IDs
   addSSEClient(userId, res);
+  const worker = inMemoryStore.getWorkerByUserId(userId);
+  if (worker && worker.id) {
+    addSSEClient(worker.id, res);
+  }
+  if (worker && worker.user_id) {
+    addSSEClient(worker.user_id, res);
+  }
 
   // Periodic heartbeat to prevent timeout
   const interval = setInterval(() => {

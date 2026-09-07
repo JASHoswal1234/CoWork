@@ -15,6 +15,134 @@ import { authenticate, requireWorker } from '../middleware/auth';
 const router = Router();
 
 /**
+ * GET /api/geospatial/reverse-geocode
+ * Reverse geocode latitude/longitude into a structured, readable address
+ */
+router.get(
+  '/reverse-geocode',
+  [
+    query('lat').isFloat({ min: -90, max: 90 }).withMessage('Valid latitude required (-90 to 90)'),
+    query('lng').isFloat({ min: -180, max: 180 }).withMessage('Valid longitude required (-180 to 180)'),
+  ],
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Invalid coordinates', details: errors.array() },
+        });
+        return;
+      }
+
+      const lat = parseFloat(req.query.lat as string);
+      const lng = parseFloat(req.query.lng as string);
+
+      let formattedAddress = '';
+      let locality = '';
+      let city = '';
+      let state = '';
+      let pincode = '';
+      let rawData: any = null;
+
+      // 1. Try Nominatim (OpenStreetMap) with proper User-Agent
+      try {
+        const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=jsonv2&addressdetails=1`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+        const response = await fetch(nominatimUrl, {
+          headers: {
+            'User-Agent': 'ShramSangam/1.0 (contact@shramsangam.in)',
+            'Accept-Language': 'en',
+          },
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = (await response.json()) as any;
+          rawData = data;
+          if (data && data.address) {
+            const addr = data.address;
+            locality = addr.suburb || addr.neighbourhood || addr.residential || addr.quarter || addr.village || addr.town || '';
+            city = addr.city || addr.town || addr.municipality || addr.county || '';
+            state = addr.state || '';
+            pincode = addr.postcode || '';
+
+            const buildingOrAmenity = addr.amenity || addr.building || addr.shop || addr.office || '';
+            const road = addr.road || addr.street || addr.footway || '';
+
+            const parts = [
+              buildingOrAmenity,
+              road,
+              locality,
+              city,
+              state ? `${state}${pincode ? ` ${pincode}` : ''}` : pincode,
+            ].filter((p) => Boolean(p && String(p).trim().length > 0));
+
+            // Deduplicate adjacent identical parts
+            const cleanParts = parts.filter((part, idx) => idx === 0 || part.toLowerCase() !== parts[idx - 1].toLowerCase());
+            formattedAddress = cleanParts.join(', ') || data.display_name || '';
+          }
+        }
+      } catch (nomErr) {
+        console.warn('Nominatim reverse geocode attempt failed, trying fallback:', nomErr);
+      }
+
+      // 2. Fallback to BigDataCloud reverse geocoding if Nominatim yielded no address
+      if (!formattedAddress) {
+        try {
+          const bdcUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+          const response = await fetch(bdcUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const data = (await response.json()) as any;
+            locality = data.locality || '';
+            city = data.city || data.locality || '';
+            state = data.principalSubdivision || '';
+            pincode = data.postcode || '';
+
+            const parts = [locality, city, state, data.countryName].filter(Boolean);
+            const cleanParts = parts.filter((part, idx) => idx === 0 || part.toLowerCase() !== parts[idx - 1].toLowerCase());
+            formattedAddress = cleanParts.join(', ');
+          }
+        } catch (bdcErr) {
+          console.warn('BigDataCloud reverse geocode attempt failed:', bdcErr);
+        }
+      }
+
+      // 3. Coordinate fallback if both reverse geocoding services failed
+      if (!formattedAddress) {
+        formattedAddress = `Location (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+      }
+
+      res.json({
+        success: true,
+        data: {
+          address: formattedAddress,
+          locality: locality || undefined,
+          city: city || undefined,
+          state: state || undefined,
+          pincode: pincode || undefined,
+          coordinates: { lat, lng },
+        },
+      });
+    } catch (error: any) {
+      console.error('Reverse geocode error:', error);
+      res.status(500).json({
+        success: false,
+        error: { code: 'GEOCODE_FAILED', message: 'Failed to reverse geocode location' },
+      });
+    }
+  }
+);
+
+/**
  * POST /api/geospatial/workers/search
  * Find nearby available workers using PostGIS ST_DWithin
  * Automatically expands radius from 10km → 25km if no results found

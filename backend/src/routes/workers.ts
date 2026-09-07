@@ -352,13 +352,16 @@ router.patch(
 
       try {
         const locationPoint = `POINT(${lng} ${lat})`;
+        // Attempt update by worker id or user_id
         await supabaseAdmin
           .from('workers')
           .update({ location: locationPoint })
-          .eq('id', id);
-      } catch {}
+          .or(`id.eq.${id},user_id.eq.${id},user_id.eq.${userId}`);
+      } catch (dbErr) {
+        console.warn('Supabase worker location update fallback to inMemoryStore:', dbErr);
+      }
 
-      const worker = inMemoryStore.getWorkerById(id) || inMemoryStore.getWorkerByUserId(userId);
+      const worker = inMemoryStore.getWorkerById(id) || inMemoryStore.getWorkerByUserId(id) || inMemoryStore.getWorkerByUserId(userId);
       if (worker) {
         worker.location = { lat, lng };
       }
@@ -367,6 +370,7 @@ router.patch(
         success: true,
         data: {
           message: 'Location updated successfully',
+          location: { lat, lng },
         },
       });
     } catch (error: any) {

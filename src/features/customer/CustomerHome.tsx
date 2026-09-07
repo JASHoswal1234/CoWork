@@ -17,7 +17,7 @@ import {
 import type { ServiceCategory } from '../../types/service';
 import { CreateServiceRequest } from './CreateServiceRequest';
 import { MyServiceRequests } from './MyServiceRequests';
-import { servicesApi, jobsApi, workersApi } from '../../lib/api';
+import { servicesApi, jobsApi, workersApi, geospatialApi } from '../../lib/api';
 
 type CustomerStage = 'browse' | 'request' | 'dispatch' | 'matched' | 'my_requests';
 
@@ -157,12 +157,23 @@ export function CustomerHome() {
     // Get real GPS
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setCustomerLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          setCustomerAddress('Current GPS Location (Pune)');
+        async (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          setCustomerLocation({ lat, lng });
+          try {
+            const res = await geospatialApi.reverseGeocode(lat, lng);
+            if (res?.address) {
+              setCustomerAddress(res.address);
+            } else {
+              setCustomerAddress(`Detected Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+            }
+          } catch {
+            setCustomerAddress(`Detected Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+          }
         },
         () => {},
-        { timeout: 5000 }
+        { timeout: 8000, maximumAge: 30000 }
       );
     }
   }, []);

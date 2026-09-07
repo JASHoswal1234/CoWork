@@ -61,15 +61,33 @@ export async function createNotification(payload: NotificationPayload) {
     console.warn('[NotificationService] Supabase insert fallback to inMemory:', err);
   }
 
-  // 3. Broadcast to active SSE clients
-  const clients = sseClients.get(payload.user_id);
-  if (clients && clients.size > 0) {
-    const eventData = `data: ${JSON.stringify(notification)}\n\n`;
-    for (const res of clients) {
-      try {
-        res.write(eventData);
-      } catch (err) {
-        console.warn('[NotificationService] SSE push error:', err);
+  // 3. Broadcast to active SSE clients across all linked IDs
+  const targetUserIds = new Set<string>([payload.user_id]);
+  const workerByUser = inMemoryStore.getWorkerByUserId(payload.user_id);
+  if (workerByUser) {
+    targetUserIds.add(workerByUser.id);
+    if (workerByUser.user_id) targetUserIds.add(workerByUser.user_id);
+  }
+  const workerById = inMemoryStore.getWorkerById(payload.user_id);
+  if (workerById) {
+    targetUserIds.add(workerById.id);
+    if (workerById.user_id) targetUserIds.add(workerById.user_id);
+  }
+
+  const notifiedClients = new Set<Response>();
+  for (const uid of targetUserIds) {
+    const clients = sseClients.get(uid);
+    if (clients && clients.size > 0) {
+      const eventData = `data: ${JSON.stringify(notification)}\n\n`;
+      for (const res of clients) {
+        if (!notifiedClients.has(res)) {
+          notifiedClients.add(res);
+          try {
+            res.write(eventData);
+          } catch (err) {
+            console.warn('[NotificationService] SSE push error:', err);
+          }
+        }
       }
     }
   }

@@ -70,7 +70,7 @@ export function WorkerDashboard() {
 
   // Update worker location in DB every 30 seconds when available
   useEffect(() => {
-    if (!workerProfile?.id || locationStatus !== 'granted') return;
+    if (!workerProfile?.id || locationStatus !== 'granted' || !gpsLocation) return;
     workersApi.updateLocation(workerProfile.id, gpsLocation.lat, gpsLocation.lng).catch(() => {});
     const interval = setInterval(() => {
       workersApi.updateLocation(workerProfile.id, gpsLocation.lat, gpsLocation.lng).catch(() => {});
@@ -140,10 +140,21 @@ export function WorkerDashboard() {
     setAcceptingId(jobId);
     setActionMessage(null);
     try {
-      await jobsApi.accept(jobId);
+      const res = await jobsApi.accept(jobId);
       setActionMessage({ type: 'success', text: 'Job accepted successfully! Customer has been notified.' });
-      // Remove from incoming and refresh active jobs
+
+      // Remove from incoming requests list
       setIncomingRequests((prev) => prev.filter((r) => r.id !== jobId));
+
+      // Optimistically add/update accepted job into active jobs state
+      const acceptedJob = (res as any)?.data?.job || (res as any)?.job;
+      if (acceptedJob) {
+        setJobs((prev) => {
+          const filtered = prev.filter((j) => j.id !== jobId);
+          return [{ ...acceptedJob, status: 'accepted' }, ...filtered];
+        });
+      }
+
       await fetchData();
     } catch (err: any) {
       console.error('Accept error:', err);

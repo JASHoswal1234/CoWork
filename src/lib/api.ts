@@ -459,3 +459,32 @@ export const notificationsApi = {
   markRead: (id: string) => request(`/api/notifications/${id}/read`, { method: 'PATCH' }),
   markAllRead: () => request('/api/notifications/read-all', { method: 'PATCH' }),
 };
+
+// ─── Geospatial API ───────────────────────────────────────────────────────────
+
+export const geospatialApi = {
+  reverseGeocode: (lat: number, lng: number) =>
+    request<{
+      address: string;
+      locality?: string;
+      city?: string;
+      state?: string;
+      pincode?: string;
+      coordinates: { lat: number; lng: number };
+    }>(`/api/geospatial/reverse-geocode?lat=${lat}&lng=${lng}`),
+
+  searchNearby: (lat: number, lng: number, serviceCategory: string) =>
+    request<{ workers: any[]; total: number }>('/api/geospatial/workers/search', {
+      method: 'POST',
+      body: JSON.stringify({ lat, lng, service_category: serviceCategory }),
+    }),
+
+  getDistance: (lat1: number, lng1: number, lat2: number, lng2: number) =>
+    request<{
+      distance_km: number;
+      distance_formatted: string;
+      eta_minutes: number;
+      eta_formatted: string;
+    }>(`/api/geospatial/distance?lat1=${lat1}&lng1=${lng1}&lat2=${lat2}&lng2=${lng2}`),
+};
+

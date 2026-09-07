@@ -265,17 +265,40 @@ router.post(
       try {
         const isUUID = (str?: string) =>
           Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
-        const catId = isUUID(service_category_id) ? service_category_id : '11111111-1111-1111-1111-111111111111';
-        const validWorkerId = worker_id && isUUID(worker_id) ? worker_id : null;
 
-        await supabaseAdmin.from('jobs').insert({
+        let catId = service_category_id && isUUID(service_category_id) ? service_category_id : null;
+        if (!catId && service_category_name) {
+          try {
+            const { data: catRecord } = await supabaseAdmin
+              .from('service_categories')
+              .select('id')
+              .ilike('name', service_category_name)
+              .maybeSingle();
+            if (catRecord) catId = catRecord.id;
+          } catch {}
+        }
+        if (!catId) {
+          try {
+            const { data: firstCat } = await supabaseAdmin
+              .from('service_categories')
+              .select('id')
+              .limit(1)
+              .maybeSingle();
+            if (firstCat) catId = firstCat.id;
+          } catch {}
+        }
+
+        const validWorkerId = worker_id && isUUID(worker_id) ? worker_id : null;
+        const validCustomerId = isUUID(userId) ? userId : null;
+
+        const { error: insertErr } = await supabaseAdmin.from('jobs').insert({
           job_number: jobNumber,
-          customer_id: userId,
+          customer_id: validCustomerId,
           customer_name: customerName,
           customer_phone: customerPhone,
           customer_location: createPostGISPoint(location.lat, location.lng),
           customer_address: address,
-          service_category_id: catId,
+          service_category_id: catId || '11111111-1111-1111-1111-111111111111',
           service_category_name,
           service_subcategory_name: service_subcategory_name || null,
           description: combinedDescription,
@@ -285,6 +308,10 @@ router.post(
           worker_id: validWorkerId,
           assigned_at: validWorkerId ? new Date().toISOString() : null,
         });
+
+        if (insertErr) {
+          console.warn('Supabase job insert error:', insertErr);
+        }
       } catch (dbErr) {
         console.warn('Supabase job insert fallback to inMemoryStore:', dbErr);
       }
@@ -860,7 +887,7 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
           data: { job_id: id, status: 'completed' },
         }).catch(console.warn);
       }
-      const workerUser = inMemoryStore.getWorkerById(job.worker_id);
+      const workerUser = job.worker_id ? inMemoryStore.getWorkerById(job.worker_id) : null;
       const workerUserId = workerUser?.user_id;
       if (workerUserId) {
         createNotification({
@@ -907,9 +934,28 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
 
     let userJobs: StoreJob[] = [];
     if (userRole === 'worker') {
-      const worker = inMemoryStore.getWorkerByUserId(userId);
-      const workerId = worker?.id || userId;
-      userJobs = Array.from(inMemoryStore.jobs.values()).filter((j) => j.worker_id === workerId);
+      let workerProfile: any = null;
+      try {
+        const { data } = await supabaseAdmin
+          .from('workers')
+          .select('id, user_id')
+          .eq('user_id', userId)
+          .maybeSingle();
+        workerProfile = data;
+      } catch {}
+
+      const memoryWorker = inMemoryStore.getWorkerByUserId(userId);
+      const possibleWorkerIds = new Set<string>([
+        userId,
+        workerProfile?.id,
+        workerProfile?.user_id,
+        memoryWorker?.id,
+        memoryWorker?.user_id,
+      ].filter(Boolean) as string[]);
+
+      userJobs = Array.from(inMemoryStore.jobs.values()).filter(
+        (j) => j.worker_id && possibleWorkerIds.has(j.worker_id)
+      );
     } else if (userRole === 'customer') {
       userJobs = Array.from(inMemoryStore.jobs.values()).filter((j) => j.customer_id === userId);
     } else {
@@ -922,9 +968,25 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
       if (userRole === 'customer') {
         queryBuilder = queryBuilder.eq('customer_id', userId);
       } else if (userRole === 'worker') {
-        const worker = inMemoryStore.getWorkerByUserId(userId);
-        const workerId = worker?.id || userId;
-        queryBuilder = queryBuilder.eq('worker_id', workerId);
+        let workerProfile: any = null;
+        try {
+          const { data } = await supabaseAdmin
+            .from('workers')
+            .select('id, user_id')
+            .eq('user_id', userId)
+            .maybeSingle();
+          workerProfile = data;
+        } catch {}
+        const memoryWorker = inMemoryStore.getWorkerByUserId(userId);
+        const possibleWorkerIds = Array.from(new Set<string>([
+          userId,
+          workerProfile?.id,
+          workerProfile?.user_id,
+          memoryWorker?.id,
+          memoryWorker?.user_id,
+        ].filter(Boolean) as string[]));
+
+        queryBuilder = queryBuilder.in('worker_id', possibleWorkerIds);
       }
       const { data: dbJobs } = await queryBuilder.order('created_at', { ascending: false });
       if (dbJobs) {

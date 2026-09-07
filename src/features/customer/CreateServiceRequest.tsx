@@ -16,7 +16,7 @@ import {
   Navigation
 } from 'lucide-react';
 import type { ServiceCategory } from '../../types/service';
-import { filesApi, mlApi } from '../../lib/api';
+import { filesApi, mlApi, geospatialApi } from '../../lib/api';
 
 interface CreateServiceRequestProps {
   categories: ServiceCategory[];
@@ -85,6 +85,7 @@ export function CreateServiceRequest({
   const [address, setAddress] = useState(initialAddress || 'Kothrud, Pune');
   const [location, setLocation] = useState(initialLocation || { lat: 18.5074, lng: 73.8077 });
   const [isLocating, setIsLocating] = useState(false);
+  const [locationDetected, setLocationDetected] = useState(false);
 
   // 4. Preferred Date & Time
   const todayStr = new Date().toISOString().split('T')[0];
@@ -114,23 +115,64 @@ export function CreateServiceRequest({
   }, [categories, initialCategory, selectedCategory]);
 
   const handleDetectLocation = () => {
-    if (!navigator.geolocation) {
+    if (isLocating) return;
+    if (!navigator || !navigator.geolocation) {
       setFormError('Geolocation is not supported by your browser.');
       return;
     }
+
     setIsLocating(true);
+    setLocationDetected(false);
+    setFormError(null);
+
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setAddress('Current GPS Location (Pune)');
-        setIsLocating(false);
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setLocation({ lat, lng });
+
+        try {
+          const res = await geospatialApi.reverseGeocode(lat, lng);
+          if (res && res.address) {
+            setAddress(res.address);
+          } else {
+            setAddress(`Detected Location (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
+          }
+          setLocationDetected(true);
+          setTimeout(() => setLocationDetected(false), 4000);
+        } catch (geoErr) {
+          console.warn('Reverse geocode error:', geoErr);
+          setAddress(`Detected Location (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
+          setLocationDetected(true);
+          setTimeout(() => setLocationDetected(false), 4000);
+        } finally {
+          setIsLocating(false);
+        }
       },
-      (err) => {
-        console.warn('Geolocation error:', err);
+      (err: GeolocationPositionError) => {
         setIsLocating(false);
-        setFormError('Unable to retrieve current GPS location. Please enter address manually.');
+        setLocationDetected(false);
+        let userMessage = 'Unable to determine your current location. Please try again or enter your address manually.';
+
+        switch (err.code) {
+          case err.PERMISSION_DENIED:
+            userMessage = 'Location permission was denied. Please allow location access in your browser settings and try again.';
+            break;
+          case err.POSITION_UNAVAILABLE:
+            userMessage = 'Unable to determine your current location. Please try again or enter your address manually.';
+            break;
+          case err.TIMEOUT:
+            userMessage = 'Location request timed out. Please try again.';
+            break;
+          default:
+            userMessage = 'Unable to retrieve current location. Please enter your address manually.';
+        }
+        setFormError(userMessage);
       },
-      { timeout: 8000 }
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 30000,
+      }
     );
   };
 
@@ -413,9 +455,20 @@ export function CreateServiceRequest({
                   type="button"
                   onClick={handleDetectLocation}
                   disabled={isLocating}
-                  className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold text-accent-primary hover:underline"
+                  className={`inline-flex items-center gap-1.5 font-mono text-[10px] font-bold transition ${
+                    isLocating
+                      ? 'text-text-tertiary cursor-not-allowed'
+                      : locationDetected
+                      ? 'text-emerald-600'
+                      : 'text-accent-primary hover:underline'
+                  }`}
                 >
-                  <Navigation size={12} /> {isLocating ? 'LOCATING…' : 'USE CURRENT GPS'}
+                  <Navigation size={12} className={isLocating ? 'animate-spin' : ''} />
+                  {isLocating
+                    ? 'DETECTING LOCATION…'
+                    : locationDetected
+                    ? 'LOCATION DETECTED ✓'
+                    : 'USE CURRENT GPS'}
                 </button>
               </div>
               <div className="mt-2 flex items-center rounded-2xl border border-status-subtle bg-white px-3.5 py-1 focus-within:border-accent-primary focus-within:ring-2 focus-within:ring-accent-primary/20">
@@ -423,8 +476,11 @@ export function CreateServiceRequest({
                 <input
                   type="text"
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Enter street address, locality, Pune"
+                  onChange={(e) => {
+                    setAddress(e.target.value);
+                    setLocationDetected(false);
+                  }}
+                  placeholder="Enter street address, locality, city"
                   className="w-full py-2.5 text-sm font-medium text-text-navy placeholder:text-text-tertiary focus:outline-none"
                   required
                 />
