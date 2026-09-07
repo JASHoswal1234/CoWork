@@ -424,3 +424,35 @@ router.patch('/payouts/:id/approve', async (req: Request, res: Response): Promis
 });
 
 export default router;
+
+
+// ─── Public: Service Categories & Subcategories ───────────────────────────────
+
+import { Router as PublicRouter } from 'express';
+export const publicRouter = PublicRouter();
+
+/**
+ * GET /api/services
+ * List all service categories with subcategories
+ */
+publicRouter.get('/', async (_req, res: any): Promise<void> => {
+  try {
+    const { data, error } = await supabase
+      .from('service_categories')
+      .select(`
+        *,
+        subcategories:service_subcategories(id, name, description, price_min, price_max, duration_min, duration_max)
+      `)
+      .eq('is_active', true)
+      .order('display_order');
+
+    if (error) {
+      res.status(500).json({ success: false, error: { code: 'QUERY_FAILED', message: error.message } });
+      return;
+    }
+
+    res.json({ success: true, data: { categories: data } });
+  } catch (e) {
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed' } });
+  }
+});

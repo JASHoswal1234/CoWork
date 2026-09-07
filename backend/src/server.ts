@@ -12,6 +12,7 @@ import reviewRoutes from './routes/reviews';
 import fileRoutes from './routes/files';
 import mlRoutes from './routes/ml';
 import adminRoutes from './routes/admin';
+import { publicRouter as servicesRouter } from './routes/admin';
 import notificationRoutes from './routes/notifications';
 
 // Load environment variables
@@ -70,6 +71,7 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/ml', mlRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/services', servicesRouter);
 app.use('/api/notifications', notificationRoutes);
 
 // 404 handler
