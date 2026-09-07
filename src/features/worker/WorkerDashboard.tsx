@@ -11,8 +11,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wrench, Award, MapPin, Clock, ArrowRight, Circle, ShieldCheck, User, RefreshCw } from 'lucide-react';
+import { Wrench, Award, MapPin, Clock, ArrowRight, Circle, ShieldCheck, User, RefreshCw, Navigation } from 'lucide-react';
 import { workersApi, jobsApi } from '../../lib/api';
+import { useLocation } from '../../hooks/useLocation';
 
 const illustrationByService: Record<string, string> = {
   Plumbing: '/illustrations/plumber.png',
@@ -25,6 +26,7 @@ const illustrationByService: Record<string, string> = {
 
 export function WorkerDashboard() {
   const navigate = useNavigate();
+  const { location: gpsLocation, status: locationStatus, requestLocation } = useLocation();
 
   const [available, setAvailable] = useState(true);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
@@ -32,6 +34,23 @@ export function WorkerDashboard() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-request location on mount
+  useEffect(() => {
+    requestLocation();
+  }, []);
+
+  // Update worker location in DB every 30 seconds when available
+  useEffect(() => {
+    if (!workerProfile?.id || locationStatus !== 'granted') return;
+    // Update immediately
+    workersApi.updateLocation(workerProfile.id, gpsLocation.lat, gpsLocation.lng).catch(() => {});
+    // Then every 30 seconds
+    const interval = setInterval(() => {
+      workersApi.updateLocation(workerProfile.id, gpsLocation.lat, gpsLocation.lng).catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [workerProfile?.id, gpsLocation, locationStatus]);
 
   const fetchData = useCallback(async () => {
     try {

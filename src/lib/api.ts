@@ -282,7 +282,12 @@ export const adminApi = {
     }),
 };
 
-// ─── Notifications API ────────────────────────────────────────────────────────
+// ─── Services API ─────────────────────────────────────────────────────────────
+
+export const servicesApi = {
+  getCategories: () =>
+    request<{ categories: any[] }>('/api/services'),
+};
 
 export const notificationsApi = {
   list: () => request<{ notifications: any[]; unread_count: number }>('/api/notifications'),

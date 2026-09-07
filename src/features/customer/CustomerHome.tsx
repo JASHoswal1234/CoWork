@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Check, ShieldCheck, AlertCircle, RefreshCw } from 'lucide-react';
 import { useMockData } from '../../contexts/MockDataContext';
 import { dispatchWorker, type DispatchResult } from '../../engines/dispatchEngine';
-import { mlApi, workersApi, jobsApi } from '../../lib/api';
+import { useLocation } from '../../hooks/useLocation';
+import { LocationPermission } from '../../components/LocationPermission';
 import type { ServiceRequest } from '../../types/job';
 import type { ServiceCategory, ServiceSubcategory } from '../../types/service';
 import { ServiceSelection } from './ServiceSelection';
@@ -111,8 +112,62 @@ function ServiceCard({ service, index, onSelect }: { service: ServiceCategory; i
 }
 
 export function CustomerHome() {
-  const { services, workers } = useMockData();
+  const { workers } = useMockData(); // keep workers for mock fallback only
   const navigate = useNavigate();
+  const [stage, setStage] = useState<CustomerStage>('browse');
+
+  // Load real services from backend
+  const [services, setServices] = useState<ServiceCategory[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(true);
+
+  // Real customer GPS location
+  const [customerLocation, setCustomerLocation] = useState({ lat: 18.5074, lng: 73.8077 }); // default Kothrud
+  const [customerAddress, setCustomerAddress] = useState('Kothrud, Pune');
+  const [locationLoading, setLocationLoading] = useState(false);
+
+  useEffect(() => {
+    // Load real service categories from backend
+    servicesApi.getCategories()
+      .then((data: any) => {
+        const cats = data?.categories || [];
+        if (cats.length > 0) {
+          // Map backend format to frontend ServiceCategory type
+          const mapped: ServiceCategory[] = cats.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            icon: c.icon || c.name.toLowerCase(),
+            description: c.description || `Professional ${c.name} services`,
+            avgPrice: `₹${c.avg_price_min || 300}—₹${c.avg_price_max || 2000}`,
+            avgDuration: `${Math.round((c.avg_duration_min || 60) / 60)}-${Math.round((c.avg_duration_max || 120) / 60)} hrs`,
+            subcategories: (c.subcategories || []).map((s: any) => ({
+              id: s.id,
+              name: s.name,
+              description: s.description || s.name,
+              requiredSkills: [c.name],
+              priceRange: { min: s.price_min, max: s.price_max },
+              durationRange: { min: s.duration_min, max: s.duration_max },
+            })),
+          }));
+          setServices(mapped);
+        }
+      })
+      .catch(() => {}) // silently fall back to mock
+      .finally(() => setServicesLoading(false));
+
+    // Get real GPS location
+    if (navigator.geolocation) {
+      setLocationLoading(true);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCustomerLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setCustomerAddress('Your location');
+          setLocationLoading(false);
+        },
+        () => setLocationLoading(false), // fall back to Kothrud on denial
+        { timeout: 5000 }
+      );
+    }
+  }, []);
   const [stage, setStage] = useState<CustomerStage>('browse');
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string | null>(null);
@@ -248,8 +303,8 @@ export function CustomerHome() {
     setVisibleStep(1);
     setStage('dispatch');
 
-    // Customer Location: Kothrud, Pune
-    const customerLocation = { lat: 18.5074, lng: 73.8077 };
+    // Customer Location: use real GPS if available, fallback to Kothrud Pune
+    const searchLocation = customerLocation;
     // Prefer the exact selected service; fall back to the category name.
     const searchTerm = selectedService.name;
     const subcategoryName = selectedSubcategory?.name || selectedService.subcategories[0]?.name || '';
