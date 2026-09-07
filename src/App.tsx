@@ -23,8 +23,16 @@ import { DemandIntelligence } from './features/cooperative/DemandIntelligence';
 import { SkillIntelligence } from './features/cooperative/SkillIntelligence';
 
 function AppRoutes() {
-  const { role } = useRole();
-  const { isAuthenticated } = useAuth();
+  const { role, switchRole } = useRole();
+  const { user, isAuthenticated, demoLogin } = useAuth();
+
+  React.useEffect(() => {
+    if (isAuthenticated && user?.role) {
+      if (role === 'cooperative' && user.role !== 'admin' && user.role !== 'cooperative') {
+        demoLogin('cooperative').catch(console.warn);
+      }
+    }
+  }, [role, user?.role, isAuthenticated]);
 
   // Show auth screen if not authenticated
   if (!isAuthenticated) {
