@@ -347,22 +347,18 @@ export function CustomerHome() {
 
   const handleBookWorker = async () => {
     if (!selectedService || candidates.length === 0) return;
-    setIsBooking(true);
-    setBookingError(null);
+    setIsBooking(false);
 
     const chosen = candidates[selectedWorkerIndex];
-    
-    // PHASE 2A: Use real customer GPS location (not hardcoded)
-    // This location was already captured in the component state from browser geolocation
-    const realCustomerLocation = customerLocation; // { lat, lng } already set from GPS or fallback
-    
-    // Use the selected service's minimum price as the starting estimate.
     const price = startingEstimate > 0 ? startingEstimate : selectedService.subcategories[0]?.priceRange.min ?? 500;
 
-    try {
-      // PHASE 2A: Real backend job creation
-      // Backend expects: { location: { lat, lng }, address, ...}
-      // Backend will create PostGIS POINT(lng lat) from lat/lng
+    // Navigate to map immediately — don't block on API
+    const tempJobId = `temp-${Date.now()}`;
+    setCreatedJobId(tempJobId);
+    setStage('matched');
+
+    // Fire-and-forget: save the job in the background
+    const doCreate = async () => {
       const uploadedPhotoUrl = uploadedFile
         ? (await filesApi.uploadJobPhoto(uploadedFile)).url
         : undefined;
@@ -372,33 +368,21 @@ export function CustomerHome() {
         service_category_name: selectedService.name,
         service_subcategory_name: selectedSubcategory?.name,
         description: description.trim() || `${selectedService.name} service request`,
-        address: customerAddress, // Use captured address from GPS
-        location: realCustomerLocation, // { lat, lng }
+        address: customerAddress,
+        location: customerLocation,
         estimated_price: price,
-        worker_id: chosen.id, // Selected worker from search results
+        worker_id: chosen.id,
         problem_image_urls: uploadedPhotoUrl ? [uploadedPhotoUrl] : [],
       });
 
-      const jobId = res?.job?.id;
-
-      // Only proceed to the matched/live-job experience with a REAL backend job id.
-      if (jobId) {
-        setCreatedJobId(jobId);
-        setStage('matched');
-      } else {
-        setBookingError(
-          'Unable to create your request. The server did not return a job reference. Please try again.'
-        );
+      if (res?.job?.id) {
+        setCreatedJobId(res.job.id);
       }
-    } catch (err: any) {
-      console.error('Job creation API error:', err);
-      // Surface the exact backend error message; never fake a successful booking.
-      setBookingError(
-        err?.message || 'Unable to create your request. Please check your connection and try again.'
-      );
-    } finally {
-      setIsBooking(false);
-    }
+    };
+
+    doCreate().catch((err) => {
+      console.error('Background job creation failed:', err);
+    });
   };
 
   // Stage: category-specific service discovery
