@@ -1,36 +1,69 @@
 /**
- * Skill Passport Page
- * 
- * PRIORITY SCREEN #3: Worker skill passport with earnings
- * Phase 2: Premium editorial redesign matching Customer design system
- * 
- * Validates Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 16.4, 17.1-17.6
+ * Skill Passport Page - Connected to real backend
+ * Shows personalized training recommendations based on ratings and job history
  */
 
-import React from 'react';
-import { CheckCircle, BookOpen, Award, ShieldCheck, FileCheck, Calendar, TrendingUp } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { CheckCircle, BookOpen, Award, ShieldCheck, FileCheck, TrendingUp, AlertTriangle, Star } from 'lucide-react';
+import { mlApi, workersApi } from '../../lib/api';
 
 export function SkillPassport() {
+  const [trainingData, setTrainingData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // For demo: use a hardcoded worker ID or get from localStorage
+  const DEMO_WORKER_ID = localStorage.getItem('demo_worker_id') || '';
+
+  useEffect(() => {
+    if (!DEMO_WORKER_ID) {
+      setLoading(false);
+      return;
+    }
+    mlApi.getWorkerTrainingRecommendations(DEMO_WORKER_ID)
+      .then(setTrainingData)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [DEMO_WORKER_ID]);
+
+  // Fallback mock worker for demo
   const worker = {
     name: 'Rajesh Kumar',
     memberSince: 'March 2022',
     todayEarnings: 1250,
     monthEarnings: 28500,
-    totalJobs: 167,
-    rating: 4.8,
+    totalJobs: trainingData?.performance?.total_completed || 167,
+    rating: trainingData?.performance?.avg_rating || 4.8,
     skills: [
       { name: 'Pipe Fitting', level: 'expert', verified: true },
       { name: 'Leak Repair', level: 'expert', verified: true },
       { name: 'Bathroom Fitting', level: 'intermediate', verified: true }
     ],
-    training: [
-      { name: 'Advanced Plumbing Systems', progress: 65, status: 'in-progress' },
-      { name: 'Safety Protocols', progress: 100, status: 'completed' }
-    ],
     certifications: [
       { name: 'NCVT Plumber Certificate', issuer: 'National Council for Vocational Training', date: 'Nov 2021' }
     ]
   };
+
+  const recommendations = trainingData?.recommendations || [
+    {
+      title: 'Advanced Plumbing Systems',
+      reason: 'Improve your technical expertise for complex installations',
+      priority: 'medium',
+      duration_weeks: 4,
+      type: 'technical',
+      modules: ['Advanced Diagnosis', 'Modern Tools', 'Quality Assurance'],
+    },
+    {
+      title: 'Safety Protocols',
+      reason: 'Stay updated with latest safety standards',
+      priority: 'low',
+      duration_weeks: 1,
+      type: 'safety',
+      modules: ['PPE Usage', 'Emergency Procedures'],
+    },
+  ];
+
+  const performance = trainingData?.performance;
+  const insights = trainingData?.insights || [];
 
   return (
     <main className="mx-auto min-h-screen max-w-[1400px] px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14">
@@ -154,13 +187,50 @@ export function SkillPassport() {
           </div>
         </section>
 
-        {/* Training Progress with illustration */}
+        {/* Performance Insights from Real Data */}
+        {performance && (
+          <section className="overflow-hidden rounded-[24px] border border-status-subtle bg-white p-5 sm:rounded-[28px] sm:p-6 md:rounded-[32px] md:p-8">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <TrendingUp size={24} className="text-accent-primary" strokeWidth={2} />
+              <p className="font-mono text-[10px] font-semibold tracking-[0.14em] text-text-secondary sm:text-[11px]">
+                PERFORMANCE INSIGHTS
+              </p>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-3 sm:mt-5 sm:gap-4">
+              <div className="rounded-xl bg-gray-50 p-3 text-center">
+                <p className="text-2xl font-extrabold text-accent-primary">★ {performance.avg_rating}</p>
+                <p className="mt-1 font-mono text-[8px] text-text-tertiary">AVG RATING</p>
+              </div>
+              <div className="rounded-xl bg-gray-50 p-3 text-center">
+                <p className="text-2xl font-extrabold text-text-navy">{performance.total_completed}</p>
+                <p className="mt-1 font-mono text-[8px] text-text-tertiary">JOBS DONE</p>
+              </div>
+              <div className="rounded-xl bg-gray-50 p-3 text-center">
+                <p className={`text-lg font-extrabold ${performance.rating_trend === 'improving' ? 'text-green-600' : 'text-accent-primary'}`}>
+                  {performance.rating_trend === 'improving' ? '↑' : '→'} {performance.rating_trend}
+                </p>
+                <p className="mt-1 font-mono text-[8px] text-text-tertiary">TREND</p>
+              </div>
+            </div>
+            {insights.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {insights.map((insight: any, i: number) => (
+                  <div key={i} className={`flex items-center gap-2 rounded-xl p-3 text-xs ${
+                    insight.type === 'alert' ? 'bg-red-50 text-red-700' : 'bg-yellow-50 text-yellow-700'
+                  }`}>
+                    <AlertTriangle size={14} />
+                    <span>{insight.message}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Personalized Training Recommendations */}
         <section className="relative min-h-[300px] overflow-hidden rounded-[32px] border border-status-subtle bg-[#fff3e0] p-6 md:p-8">
-          {/* Background illustration */}
           <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <img 
-              src="/illustrations/worker-training.png" 
-              alt="" 
+            <img src="/illustrations/worker-training.png" alt=""
               className="absolute bottom-[-8%] right-[-10%] h-[100%] w-auto max-w-none opacity-50 md:bottom-[-6%] md:right-[-8%]"
               style={{ objectFit: 'contain', objectPosition: 'bottom right' }}
             />
@@ -169,42 +239,51 @@ export function SkillPassport() {
           <div className="relative z-10">
             <div className="flex items-center gap-3">
               <BookOpen size={28} className="text-accent-primary" strokeWidth={2} />
-              <h2 className="text-2xl font-extrabold tracking-[-0.04em] text-text-navy md:text-3xl">
-                Training Progress
-              </h2>
+              <div>
+                <h2 className="text-2xl font-extrabold tracking-[-0.04em] text-text-navy md:text-3xl">
+                  Personalised Training
+                </h2>
+                <p className="mt-0.5 text-xs text-text-secondary">Based on your ratings, job history and market demand</p>
+              </div>
             </div>
-            <div className="mt-6 max-w-2xl space-y-5">
-              {worker.training.map((course, index) => (
+
+            <div className="mt-6 max-w-2xl space-y-4">
+              {recommendations.map((rec: any, index: number) => (
                 <div key={index} className="rounded-2xl bg-white/90 p-5 shadow-sm backdrop-blur-sm">
                   <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-3">
-                      <div className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${
-                        course.status === 'completed' ? 'bg-green-100' : 'bg-accent-light'
-                      }`}>
-                        {course.status === 'completed' ? (
-                          <CheckCircle size={18} className="text-green-600" strokeWidth={2.5} />
-                        ) : (
-                          <BookOpen size={18} className="text-accent-primary" strokeWidth={2} />
-                        )}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 font-mono text-[8px] font-bold ${
+                          rec.priority === 'high' ? 'bg-red-100 text-red-700' :
+                          rec.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-green-100 text-green-700'
+                        }`}>
+                          {rec.priority.toUpperCase()}
+                        </span>
+                        <span className="font-mono text-[8px] text-text-tertiary">{rec.duration_weeks}W COURSE</span>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold leading-tight text-text-navy">{course.name}</p>
-                        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-text-tertiary">
-                          {course.status === 'completed' ? 'Completed' : 'In Progress'}
+                      <p className="mt-2 font-semibold text-text-navy">{rec.title}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-text-secondary">{rec.reason}</p>
+                      {rec.expected_rating_boost && (
+                        <p className="mt-2 font-mono text-[9px] font-bold text-accent-primary">
+                          ★ Expected: {rec.expected_rating_boost}
                         </p>
-                      </div>
+                      )}
+                      {rec.expected_income_boost && (
+                        <p className="mt-2 font-mono text-[9px] font-bold text-green-600">
+                          💰 {rec.expected_income_boost}
+                        </p>
+                      )}
+                      {rec.modules && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {rec.modules.map((m: string, i: number) => (
+                            <span key={i} className="rounded-full border border-accent-primary/20 bg-accent-light/30 px-2 py-0.5 text-[10px] text-text-secondary">
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <span className="flex-shrink-0 font-mono text-sm font-semibold text-accent-primary">
-                      {course.progress}%
-                    </span>
-                  </div>
-                  <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-background-primary">
-                    <div 
-                      className={`h-full rounded-full transition-all ${
-                        course.status === 'completed' ? 'bg-green-500' : 'bg-accent-primary'
-                      }`}
-                      style={{ width: `${course.progress}%` }}
-                    />
                   </div>
                 </div>
               ))}

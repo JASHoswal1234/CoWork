@@ -203,6 +203,11 @@ export const mlApi = {
     );
   },
 
+  getWorkerTrainingRecommendations: (workerId: string) =>
+    request<{ performance: any; recommendations: any[]; insights: any[] }>(
+      `/api/ml/worker/${workerId}/training-recommendations`
+    ),
+
   analyzeImage: async (imageFile: File) => {
     const token = getToken();
     const formData = new FormData();

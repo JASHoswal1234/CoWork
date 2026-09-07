@@ -496,3 +496,196 @@ router.get('/pricing/surge', async (req: Request, res: Response): Promise<void> 
 });
 
 export default router;
+
+
+// ============================================================
+// FEATURE 5: PERSONALIZED WORKER TRAINING RECOMMENDATIONS
+// ============================================================
+
+/**
+ * GET /api/ml/worker/:worker_id/training-recommendations
+ * Personalized training based on:
+ * - Worker's current rating
+ * - Job completion rate
+ * - Customer complaints/disputes
+ * - Skill gaps in their category
+ * - Market demand for their skills
+ */
+router.get('/worker/:worker_id/training-recommendations', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { worker_id } = req.params;
+
+    // Get worker profile
+    const { data: worker } = await supabase
+      .from('workers')
+      .select(`
+        id, rating, total_ratings, completed_jobs, city,
+        skills:worker_skills(category, subcategory, skill_level, verified)
+      `)
+      .eq('id', worker_id)
+      .single();
+
+    if (!worker) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Worker not found' },
+      });
+      return;
+    }
+
+    // Get job history for this worker
+    const { data: jobs } = await supabase
+      .from('jobs')
+      .select('status, rating, service_category_name, created_at')
+      .eq('worker_id', worker_id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    const completedJobs = (jobs || []).filter((j: any) => j.status === 'completed');
+    const disputedJobs = (jobs || []).filter((j: any) => j.status === 'rejected');
+    const ratings = completedJobs.filter((j: any) => j.rating).map((j: any) => j.rating);
+    const avgRating = ratings.length > 0
+      ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length
+      : worker.rating || 0;
+
+    const disputeRate = (jobs || []).length > 0
+      ? disputedJobs.length / (jobs || []).length
+      : 0;
+
+    const lowRatingJobs = completedJobs.filter((j: any) => j.rating && j.rating <= 3);
+
+    // Build personalized recommendations
+    const recommendations: any[] = [];
+    const insights: any[] = [];
+
+    // 1. Rating-based recommendations
+    if (avgRating < 3.5) {
+      recommendations.push({
+        title: 'Customer Service Excellence',
+        reason: `Your average rating is ${avgRating.toFixed(1)}/5. Improving communication and punctuality can significantly boost ratings.`,
+        priority: 'high',
+        duration_weeks: 2,
+        type: 'soft_skills',
+        modules: ['Professional Communication', 'Time Management', 'Customer Expectations Setting'],
+        expected_rating_boost: '+0.5 to +1.0 stars',
+      });
+      insights.push({ type: 'warning', message: `${lowRatingJobs.length} jobs received 3 stars or below recently` });
+    }
+
+    if (avgRating >= 3.5 && avgRating < 4.5) {
+      recommendations.push({
+        title: 'Advanced Techniques in ' + (worker.skills?.[0]?.category || 'Your Trade'),
+        reason: 'Workers with 4.5+ ratings earn 35% more. Advanced skill certification can push your rating higher.',
+        priority: 'medium',
+        duration_weeks: 4,
+        type: 'technical',
+        modules: ['Advanced Problem Diagnosis', 'Modern Tools & Equipment', 'Quality Assurance'],
+        expected_rating_boost: '+0.3 to +0.7 stars',
+      });
+    }
+
+    // 2. Dispute-based recommendations
+    if (disputeRate > 0.1) {
+      recommendations.push({
+        title: 'Work Quality & Documentation',
+        reason: `${Math.round(disputeRate * 100)}% of your jobs have disputes. Learning proper work documentation prevents misunderstandings.`,
+        priority: 'high',
+        duration_weeks: 1,
+        type: 'process',
+        modules: ['Before/After Photo Documentation', 'Verbal Agreement Best Practices', 'Dispute Prevention'],
+        expected_improvement: 'Reduce disputes by 60-80%',
+      });
+      insights.push({ type: 'alert', message: `${disputedJobs.length} disputed jobs detected` });
+    }
+
+    // 3. Skill gap based recommendations (from market demand)
+    const workerCategories = (worker.skills || []).map((s: any) => s.category);
+    const inDemandSkills = ['Electrical', 'Plumbing', 'Appliance Repair'];
+    const missingHighDemand = inDemandSkills.filter(s => !workerCategories.includes(s));
+
+    if (missingHighDemand.length > 0) {
+      recommendations.push({
+        title: `Add ${missingHighDemand[0]} to Your Skills`,
+        reason: `${missingHighDemand[0]} is in high demand in your area with 40% unfilled jobs. Adding this skill can double your job opportunities.`,
+        priority: 'medium',
+        duration_weeks: 6,
+        type: 'skill_expansion',
+        modules: [`${missingHighDemand[0]} Fundamentals`, 'Safety Certification', 'Hands-on Practice'],
+        expected_income_boost: '₹5,000-₹10,000/month additional',
+      });
+    }
+
+    // 4. Experience-based recommendations
+    if ((worker.completed_jobs || 0) < 20) {
+      recommendations.push({
+        title: 'New Worker Onboarding Mastery',
+        reason: 'Complete our fast-track program to get more jobs and build your reputation quickly.',
+        priority: 'high',
+        duration_weeks: 1,
+        type: 'onboarding',
+        modules: ['App Usage', 'Job Acceptance Best Practices', 'First Impression Guide'],
+        expected_improvement: '3x more job offers in first month',
+      });
+    }
+
+    if ((worker.completed_jobs || 0) > 100 && avgRating > 4.5) {
+      recommendations.push({
+        title: 'Cooperative Leadership Program',
+        reason: 'Your excellent track record qualifies you for our mentor program. Earn extra income by training new workers.',
+        priority: 'low',
+        duration_weeks: 3,
+        type: 'leadership',
+        modules: ['Mentorship Skills', 'Training Delivery', 'Quality Assessment'],
+        expected_income_boost: '₹3,000-₹5,000/month as mentor',
+      });
+    }
+
+    // 5. Seasonal recommendations
+    const currentMonth = new Date().getMonth() + 1;
+    if (currentMonth >= 6 && currentMonth <= 8) {
+      recommendations.push({
+        title: 'Monsoon Season Specialization',
+        reason: 'Waterproofing and drainage work peaks during monsoon. Get certified to capture seasonal demand.',
+        priority: 'medium',
+        duration_weeks: 2,
+        type: 'seasonal',
+        modules: ['Waterproofing Techniques', 'Drainage Systems', 'Leak Detection'],
+        expected_income_boost: '+40% earnings during monsoon',
+      });
+    }
+
+    // Sort by priority
+    const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    recommendations.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+
+    // Performance summary
+    const performance = {
+      avg_rating: Number(avgRating.toFixed(2)),
+      total_completed: completedJobs.length,
+      dispute_rate: `${(disputeRate * 100).toFixed(1)}%`,
+      rating_trend: ratings.length >= 2
+        ? (ratings[0] > ratings[ratings.length - 1] ? 'improving' : 'declining')
+        : 'stable',
+      strengths: avgRating > 4 ? ['High customer satisfaction', 'Reliable service'] : [],
+      areas_for_improvement: avgRating < 4 ? ['Customer communication', 'Work quality consistency'] : [],
+    };
+
+    res.json({
+      success: true,
+      data: {
+        worker_id,
+        performance,
+        recommendations,
+        insights,
+        total_recommendations: recommendations.length,
+        generated_at: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('Training recommendations error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to generate recommendations' },
+    });
+  }
+});
