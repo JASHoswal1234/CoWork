@@ -66,9 +66,22 @@ export function LiveJob() {
 
   const workerLocation: MapCoordinate | undefined = realWorker?.location
     ? parseCoordinate(realWorker.location)
-    : state?.worker?.lat != null
-    ? { lat: state.worker.lat, lng: state.worker.lng }
-    : undefined;
+    : (state?.workerLocation as MapCoordinate | undefined) ||
+      (state?.worker?.lat != null ? { lat: state.worker.lat, lng: state.worker.lng } : undefined);
+
+  // If we still have no worker coords, approximate from distanceKm + a NE bearing
+  // so the marker is always visible on the map
+  const workerLocationOrApprox: MapCoordinate = workerLocation ?? (() => {
+    const distKm = state?.worker?.distanceKm ?? 2.5;
+    const R = 6371;
+    const bearing = (45 * Math.PI) / 180; // NE direction
+    const d = distKm / R;
+    const lat1 = (customerLocation.lat * Math.PI) / 180;
+    const lng1 = (customerLocation.lng * Math.PI) / 180;
+    const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(bearing));
+    const lng2 = lng1 + Math.atan2(Math.sin(bearing) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+    return { lat: (lat2 * 180) / Math.PI, lng: (lng2 * 180) / Math.PI };
+  })();
 
   // Fetch real job from backend
   useEffect(() => {
@@ -296,7 +309,7 @@ export function LiveJob() {
       <div className="grid gap-5 sm:gap-6 lg:grid-cols-[1.1fr_.9fr]">
         <section className="overflow-hidden rounded-[24px] border border-status-subtle bg-white sm:rounded-[28px] md:rounded-[32px]">
           <div className="relative min-h-[260px] overflow-hidden bg-[#eaf1f8] sm:min-h-[300px]">
-              <GoogleMap customer={customerLocation} worker={workerLocation} workerLabel={worker.name} />
+              <GoogleMap customer={customerLocation} worker={workerLocationOrApprox} workerLabel={worker.name} />
 
             <div className="absolute bottom-5 left-5 flex items-center gap-1.5 font-mono text-[9px] tracking-[0.1em] text-text-secondary sm:bottom-7 sm:left-7 sm:gap-2 sm:text-[10px]">
               <MapPin size={12} className="text-accent-primary sm:h-[14px] sm:w-[14px]" /> GOOGLE MAPS LIVE TRACKING

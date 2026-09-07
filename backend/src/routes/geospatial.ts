@@ -144,10 +144,14 @@ async function fallbackWorkerSearch(
 
   const results = matchingWorkers.map((w: any) => {
     let distanceKm = 3.5;
+    let workerLat: number | null = null;
+    let workerLng: number | null = null;
     if (w.location) {
       const coords = parsePostGISPoint(w.location);
       if (coords) {
         distanceKm = calculateDistance(lat, lng, coords.lat, coords.lng);
+        workerLat = coords.lat;
+        workerLng = coords.lng;
       }
     }
     return {
@@ -162,6 +166,8 @@ async function fallbackWorkerSearch(
       city: w.city,
       skills: w.skills,
       distance_meters: Math.round(distanceKm * 1000),
+      lat: workerLat,
+      lng: workerLng,
     };
   });
 

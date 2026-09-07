@@ -96,7 +96,7 @@ export function GoogleMap({
 
         if (!worker) return;
 
-        // Worker marker — accent orange pin
+        // Worker marker — red pin
         new maps.Marker({
           map,
           position: worker,
@@ -104,7 +104,7 @@ export function GoogleMap({
           icon: {
             path: maps.SymbolPath.FORWARD_CLOSED_ARROW,
             scale: 6,
-            fillColor: '#f97316',
+            fillColor: '#ef4444',
             fillOpacity: 1,
             strokeColor: '#ffffff',
             strokeWeight: 2,
@@ -119,7 +119,7 @@ export function GoogleMap({
           map,
           suppressMarkers: true, // we have custom markers above
           polylineOptions: {
-            strokeColor: '#f97316',
+            strokeColor: '#ef4444',
             strokeOpacity: 0.85,
             strokeWeight: 4,
           },
@@ -145,7 +145,7 @@ export function GoogleMap({
               new maps.Polyline({
                 map,
                 path: [worker, customer],
-                strokeColor: '#f97316',
+                strokeColor: '#ef4444',
                 strokeOpacity: 0.7,
                 strokeWeight: 3,
                 geodesic: true,

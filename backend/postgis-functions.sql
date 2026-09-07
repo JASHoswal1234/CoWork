@@ -1,6 +1,8 @@
 -- Run this in Supabase SQL Editor
 -- Creates the PostGIS function for finding nearby available workers
 
+DROP FUNCTION IF EXISTS find_nearby_workers(double precision, double precision, text, integer);
+
 CREATE OR REPLACE FUNCTION find_nearby_workers(
   p_lat FLOAT,
   p_lng FLOAT,
@@ -18,7 +20,9 @@ RETURNS TABLE (
   completed_jobs INT,
   distance_meters FLOAT,
   city VARCHAR(100),
-  skills JSONB
+  skills JSONB,
+  lat FLOAT,
+  lng FLOAT
 ) AS $$
 BEGIN
   RETURN QUERY
@@ -44,7 +48,9 @@ BEGIN
       ))
       FROM worker_skills ws
       WHERE ws.worker_id = w.id
-    ) AS skills
+    ) AS skills,
+    ST_Y(w.location::geometry) AS lat,
+    ST_X(w.location::geometry) AS lng
   FROM workers w
   JOIN users u ON w.user_id = u.id
   WHERE

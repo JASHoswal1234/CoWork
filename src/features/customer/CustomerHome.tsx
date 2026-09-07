@@ -19,6 +19,8 @@ interface CandidateDisplay {
   etaMinutes: number;
   photoUrl?: string;
   city?: string;
+  lat?: number;
+  lng?: number;
 }
 
 const illustrationByService: Record<string, string> = {
@@ -325,6 +327,8 @@ export function CustomerHome() {
           etaMinutes: w.eta_minutes || 10,
           photoUrl: w.photo_url || illustrationByService[selectedService.name],
           city: w.city || 'Pune',
+          lat: w.lat ?? w.latitude ?? null,
+          lng: w.lng ?? w.longitude ?? null,
         }));
         setCandidates(mappedCandidates);
       } else {
@@ -625,6 +629,7 @@ export function CustomerHome() {
                   jobId: createdJobId,
                   price: startingEstimate,
                   customerLocation,
+                  workerLocation: chosen.lat != null ? { lat: chosen.lat, lng: chosen.lng } : undefined,
                 },
               })
             }
