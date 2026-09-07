@@ -447,14 +447,14 @@ export function OperationsDashboard() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-status-subtle pb-4">
             <div>
               <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-text-secondary sm:text-[10px] sm:tracking-[0.16em]">
-                FINANCIAL SUSTAINABILITY
+                WORKER-OWNED COOPERATIVE ECONOMICS
               </p>
               <h2 className="mt-1 text-xl font-extrabold tracking-tight text-text-navy sm:text-2xl">
-                Platform Earnings & Revenue Distribution
+                Cooperative Revenue & Surplus Distribution
               </h2>
             </div>
             <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1 font-mono text-xs font-bold text-emerald-800">
-              15% COOPERATIVE COMMISSION
+              100% WORKER OWNED · 0% FOUNDER PROFIT
             </span>
           </div>
 
@@ -464,7 +464,7 @@ export function OperationsDashboard() {
               <div className="flex items-center gap-2 text-text-tertiary">
                 <Briefcase size={16} className="text-accent-primary" />
                 <p className="font-mono text-[9px] font-bold tracking-wider uppercase">
-                  Completed Job Value
+                  Total Completed Revenue (100%)
                 </p>
               </div>
               <p className="mt-3 text-3xl font-extrabold tracking-tight text-text-navy sm:text-4xl">
@@ -475,35 +475,35 @@ export function OperationsDashboard() {
               </p>
             </div>
 
-            {/* Platform Earnings (15%) */}
+            {/* Cooperative Surplus Pool (15%) */}
             <div className="rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/50 p-5">
               <div className="flex items-center gap-2 text-emerald-800">
                 <DollarSign size={16} className="text-emerald-600" />
                 <p className="font-mono text-[9px] font-bold tracking-wider uppercase">
-                  Total Platform Earnings (15%)
+                  Cooperative Surplus Pool (15%)
                 </p>
               </div>
               <p className="mt-3 text-3xl font-extrabold tracking-tight text-emerald-700 sm:text-4xl">
                 ₹{kpis.platformEarnings.toLocaleString()}
               </p>
               <p className="mt-1.5 text-xs text-emerald-800">
-                Cooperative commission supporting platform servers, verification, and guild training.
+                Surplus allocated 100% back to workers based on proportional work contribution share.
               </p>
             </div>
 
-            {/* Worker Net Earnings (85%) */}
+            {/* Direct Worker Earnings (85%) */}
             <div className="rounded-2xl bg-blue-50/60 p-5">
               <div className="flex items-center gap-2 text-blue-800">
                 <Users size={16} className="text-accent-primary" />
                 <p className="font-mono text-[9px] font-bold tracking-wider uppercase">
-                  Worker Payouts (85%)
+                  Direct Worker Earnings (85%)
                 </p>
               </div>
               <p className="mt-3 text-3xl font-extrabold tracking-tight text-accent-primary sm:text-4xl">
                 ₹{kpis.workerEarnings.toLocaleString()}
               </p>
               <p className="mt-1.5 text-xs text-text-secondary">
-                Direct worker take-home earnings credited to technician wallets.
+                Direct technician take-home earnings credited immediately upon completion.
               </p>
             </div>
           </div>
@@ -514,7 +514,7 @@ export function OperationsDashboard() {
               <div className="flex items-center gap-2 mb-4">
                 <BarChart3 size={18} className="text-accent-primary" />
                 <h3 className="text-base font-extrabold text-text-navy">
-                  Monthly Platform Earnings History
+                  Monthly Cooperative Revenue & Surplus History
                 </h3>
               </div>
               
@@ -525,8 +525,8 @@ export function OperationsDashboard() {
                       <th className="py-2.5 px-4">Completion Month</th>
                       <th className="py-2.5 px-4">Completed Jobs</th>
                       <th className="py-2.5 px-4">Gross Job Value</th>
-                      <th className="py-2.5 px-4">Worker Share (85%)</th>
-                      <th className="py-2.5 px-4 text-right">Platform Cut (15%)</th>
+                      <th className="py-2.5 px-4">Direct Earnings (85%)</th>
+                      <th className="py-2.5 px-4 text-right">Cooperative Pool (15%)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-status-subtle">

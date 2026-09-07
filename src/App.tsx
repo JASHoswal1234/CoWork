@@ -3,7 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { RoleProvider, useRole } from './contexts/RoleContext';
 import { MockDataProvider } from './contexts/MockDataContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { RoleSwitcher } from './components/layouts/RoleSwitcher';
+import { Header } from './components/layouts/Header';
+import { Footer } from './components/layouts/Footer';
 
 // Auth Pages
 import { AuthLanding } from './features/auth/AuthLanding';
@@ -34,39 +35,41 @@ function AppRoutes() {
     }
   }, [role, user?.role, isAuthenticated]);
 
-  // Show auth screen if not authenticated
-  if (!isAuthenticated) {
-    return <AuthLanding />;
-  }
-
   return (
-    <div className="min-h-screen bg-background-primary font-body">
-      <RoleSwitcher />
-      <Routes>
-        {role === 'customer' && (
-          <>
-            <Route path="/" element={<CustomerHome />} />
-            <Route path="/job/:jobId" element={<LiveJob />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </>
+    <div className="flex min-h-screen flex-col bg-background-primary font-body">
+      <Header />
+      <main className="flex-1">
+        {!isAuthenticated ? (
+          <AuthLanding />
+        ) : (
+          <Routes>
+            {role === 'customer' && (
+              <>
+                <Route path="/" element={<CustomerHome />} />
+                <Route path="/job/:jobId" element={<LiveJob />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </>
+            )}
+            {role === 'worker' && (
+              <>
+                <Route path="/" element={<WorkerDashboard />} />
+                <Route path="/job/:jobId" element={<IncomingJob />} />
+                <Route path="/passport" element={<SkillPassport />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </>
+            )}
+            {role === 'cooperative' && (
+              <>
+                <Route path="/" element={<OperationsDashboard />} />
+                <Route path="/intelligence/demand" element={<DemandIntelligence />} />
+                <Route path="/intelligence/skills" element={<SkillIntelligence />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </>
+            )}
+          </Routes>
         )}
-        {role === 'worker' && (
-          <>
-            <Route path="/" element={<WorkerDashboard />} />
-            <Route path="/job/:jobId" element={<IncomingJob />} />
-            <Route path="/passport" element={<SkillPassport />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </>
-        )}
-        {role === 'cooperative' && (
-          <>
-            <Route path="/" element={<OperationsDashboard />} />
-            <Route path="/intelligence/demand" element={<DemandIntelligence />} />
-            <Route path="/intelligence/skills" element={<SkillIntelligence />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </>
-        )}
-      </Routes>
+      </main>
+      <Footer />
     </div>
   );
 }

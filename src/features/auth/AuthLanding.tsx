@@ -60,31 +60,35 @@ export function AuthLanding() {
     setWorkerStep('basic');
     setDigiStatus('idle');
     setFaceStep('intro');
-    if (s === 'cooperative-auth') {
-      setLoginForm({ email: 'admin@cooperative.org', password: 'admin123' });
-    } else if (s === 'customer-auth') {
-      setLoginForm({ email: 'customer@sahakar.org', password: 'demo123' });
-    } else if (s === 'worker-auth') {
-      setLoginForm({ email: 'rajesh@sahakar.org', password: 'demo123' });
-    }
+    setLoginForm({ email: '', password: '' });
     if (role) switchRole(role === 'cooperative' ? 'cooperative' : role);
   };
 
+  React.useEffect(() => {
+    const handleGoHome = () => {
+      setScreen('landing');
+      setError('');
+      setAuthTab('login');
+      setWorkerStep('basic');
+      setDigiStatus('idle');
+      setFaceStep('intro');
+      setLoginForm({ email: '', password: '' });
+    };
+    window.addEventListener('shram-sangam-go-home', handleGoHome);
+    return () => window.removeEventListener('shram-sangam-go-home', handleGoHome);
+  }, []);
+
   const handleLogin = async (role: RoleChoice) => {
     setError('');
+    const email = loginForm.email.trim();
+    const password = loginForm.password;
+
+    if (!email || !password) {
+      setError('Please enter your email and password.');
+      return;
+    }
+
     try {
-      let email = loginForm.email.trim();
-      let password = loginForm.password;
-      if (!email && role === 'cooperative') {
-        email = 'admin@cooperative.org';
-        password = password || 'admin123';
-      } else if (!email && role === 'customer') {
-        email = 'customer@sahakar.org';
-        password = password || 'demo123';
-      } else if (!email && role === 'worker') {
-        email = 'rajesh@sahakar.org';
-        password = password || 'demo123';
-      }
       await login(email, password);
       switchRole(role === 'cooperative' ? 'cooperative' : role);
     } catch (e: any) { setError(e.message || 'Login failed'); }
@@ -317,11 +321,11 @@ export function AuthLanding() {
             <div className="space-y-4">
               <div className="relative">
                 <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                <input type="email" required value={loginForm.email} onChange={e => setLoginForm(p => ({ ...p, email: e.target.value }))} placeholder="you@example.com" className={inputCls} />
+                <input type="email" required value={loginForm.email} onChange={e => setLoginForm(p => ({ ...p, email: e.target.value }))} placeholder="Enter your email" className={inputCls} autoComplete="off" />
               </div>
               <div className="relative">
                 <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                <input type={showPw ? 'text' : 'password'} required value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="Password" className="w-full rounded-2xl border border-status-subtle bg-[#F7F7F7] py-3.5 pl-11 pr-11 text-sm text-text-navy placeholder:text-text-tertiary focus:border-accent-primary focus:bg-white focus:outline-none transition" />
+                <input type={showPw ? 'text' : 'password'} required value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="Enter your password" className="w-full rounded-2xl border border-status-subtle bg-[#F7F7F7] py-3.5 pl-11 pr-11 text-sm text-text-navy placeholder:text-text-tertiary focus:border-accent-primary focus:bg-white focus:outline-none transition" autoComplete="off" />
                 <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-4 top-1/2 -translate-y-1/2 text-text-tertiary">{showPw ? <EyeOff size={16} /> : <Eye size={16} />}</button>
               </div>
               <button onClick={() => handleLogin('customer')} disabled={isLoading} className={btnPrimary}>
@@ -381,11 +385,11 @@ export function AuthLanding() {
           <div className="mt-6 space-y-4">
             <div className="relative">
               <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary" />
-              <input type="email" value={loginForm.email} onChange={e => setLoginForm(p => ({ ...p, email: e.target.value }))} placeholder="admin@cooperative.org" className={inputCls} />
+              <input type="email" required value={loginForm.email} onChange={e => setLoginForm(p => ({ ...p, email: e.target.value }))} placeholder="Enter your email" className={inputCls} autoComplete="off" />
             </div>
             <div className="relative">
               <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary" />
-              <input type={showPw ? 'text' : 'password'} value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="Password" className="w-full rounded-2xl border border-status-subtle bg-[#F7F7F7] py-3.5 pl-11 pr-11 text-sm text-text-navy placeholder:text-text-tertiary focus:border-accent-primary focus:bg-white focus:outline-none transition" />
+              <input type={showPw ? 'text' : 'password'} required value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="Enter your password" className="w-full rounded-2xl border border-status-subtle bg-[#F7F7F7] py-3.5 pl-11 pr-11 text-sm text-text-navy placeholder:text-text-tertiary focus:border-accent-primary focus:bg-white focus:outline-none transition" autoComplete="off" />
               <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-4 top-1/2 -translate-y-1/2 text-text-tertiary">{showPw ? <EyeOff size={16} /> : <Eye size={16} />}</button>
             </div>
             <button onClick={() => handleLogin('cooperative')} disabled={isLoading}
@@ -445,11 +449,11 @@ export function AuthLanding() {
             <div className="space-y-4">
               <div className="relative">
                 <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                <input type="email" value={loginForm.email} onChange={e => setLoginForm(p => ({ ...p, email: e.target.value }))} placeholder="worker@example.com" className={inputCls} />
+                <input type="email" required value={loginForm.email} onChange={e => setLoginForm(p => ({ ...p, email: e.target.value }))} placeholder="Enter your email" className={inputCls} autoComplete="off" />
               </div>
               <div className="relative">
                 <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                <input type={showPw ? 'text' : 'password'} value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="Password" className="w-full rounded-2xl border border-status-subtle bg-[#F7F7F7] py-3.5 pl-11 pr-11 text-sm text-text-navy placeholder:text-text-tertiary focus:border-accent-primary focus:bg-white focus:outline-none transition" />
+                <input type={showPw ? 'text' : 'password'} required value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} placeholder="Enter your password" className="w-full rounded-2xl border border-status-subtle bg-[#F7F7F7] py-3.5 pl-11 pr-11 text-sm text-text-navy placeholder:text-text-tertiary focus:border-accent-primary focus:bg-white focus:outline-none transition" autoComplete="off" />
                 <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-4 top-1/2 -translate-y-1/2 text-text-tertiary">{showPw ? <EyeOff size={16} /> : <Eye size={16} />}</button>
               </div>
               <button onClick={() => handleLogin('worker')} disabled={isLoading} className={btnPrimary}>

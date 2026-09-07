@@ -634,6 +634,97 @@ router.patch('/payouts/:id/approve', async (req: Request, res: Response): Promis
   }
 });
 
+/**
+ * POST /api/admin/distribute-surplus
+ * Calculate and allocate 15% cooperative surplus pool to active workers based on work share (Idempotent)
+ */
+router.post('/distribute-surplus', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const period = (req.body?.period as string) || new Date().toISOString().substring(0, 7);
+    const result = inMemoryStore.distributeCooperativeSurplus(period);
+
+    // Also attempt to distribute in Supabase if connected
+    try {
+      const { data: completedJobs } = await supabaseAdmin
+        .from('jobs')
+        .select('worker_id, actual_price')
+        .eq('status', 'completed');
+
+      if (completedJobs && completedJobs.length > 0) {
+        let totalRevenue = 0;
+        const workerTotals: Record<string, number> = {};
+        for (const j of completedJobs) {
+          const amt = Number(j.actual_price || 0);
+          totalRevenue += amt;
+          if (j.worker_id) {
+            workerTotals[j.worker_id] = (workerTotals[j.worker_id] || 0) + amt;
+          }
+        }
+
+        const pool = Number((totalRevenue * 0.15).toFixed(2));
+        for (const [wId, workAmt] of Object.entries(workerTotals)) {
+          const sharePct = totalRevenue > 0 ? Number(((workAmt / totalRevenue) * 100).toFixed(2)) : 0;
+          const distAmt = Number((pool * (sharePct / 100)).toFixed(2));
+
+          // Idempotent upsert/insert
+          const { error: insErr } = await supabaseAdmin.from('cooperative_distributions').insert({
+            worker_id: wId,
+            distribution_period: period,
+            eligible_work_amount: workAmt,
+            work_share_percentage: sharePct,
+            cooperative_pool_amount: pool,
+            distribution_amount: distAmt,
+          });
+
+          if (!insErr) {
+            // Update wallet
+            const { data: wallet } = await supabaseAdmin
+              .from('worker_wallets')
+              .select('id, balance, total_earned')
+              .eq('worker_id', wId)
+              .maybeSingle();
+
+            if (wallet) {
+              await supabaseAdmin
+                .from('worker_wallets')
+                .update({
+                  balance: Number(wallet.balance) + distAmt,
+                  total_earned: Number(wallet.total_earned) + distAmt,
+                })
+                .eq('id', wallet.id);
+
+              await supabaseAdmin.from('wallet_transactions').insert({
+                wallet_id: wallet.id,
+                transaction_type: 'cooperative_distribution',
+                amount: distAmt,
+                balance_after: Number(wallet.balance) + distAmt,
+                job_id: null,
+                description: `Shram Sangam cooperative surplus distribution (15% pool) for ${period}`,
+              });
+            }
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.warn('Supabase surplus distribution note:', dbErr);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        message: `Cooperative surplus distributed for ${period}`,
+        ...result,
+      },
+    });
+  } catch (error: any) {
+    console.error('Distribute surplus error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: error?.message || 'Failed to distribute surplus' },
+    });
+  }
+});
+
 export default router;
 
 // ─── Public: Service Categories & Subcategories ───────────────────────────────

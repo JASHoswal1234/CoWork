@@ -237,6 +237,22 @@ export const workersApi = {
       body: JSON.stringify({ available }),
     }),
 
+  getEarnings: (period?: 'today' | 'week' | 'month' | 'total') =>
+    request<{
+      period: string;
+      direct_service_earnings: number;
+      cooperative_distribution: number;
+      total_earnings: number;
+      cooperative_pool: number;
+      worker_work_amount: number;
+      work_share_percentage: number;
+      total_platform_work_amount: number;
+      completed_jobs_count: number;
+      platform_completed_jobs_count: number;
+      wallet_balance: number;
+      distributions: any[];
+    }>(`/api/workers/profile/me/earnings${period ? '?period=' + period : ''}`),
+
   searchNearby: (lat: number, lng: number, serviceCategory: string) =>
     request<{ workers: any[]; total: number }>('/api/geospatial/workers/search', {
       method: 'POST',
@@ -422,6 +438,11 @@ export const adminApi = {
     request(`/api/admin/disputes/${id}/resolve`, {
       method: 'PATCH',
       body: JSON.stringify({ resolution }),
+    }),
+  distributeSurplus: (period: string) =>
+    request<any>('/api/admin/distribute-surplus', {
+      method: 'POST',
+      body: JSON.stringify({ period }),
     }),
 };
 

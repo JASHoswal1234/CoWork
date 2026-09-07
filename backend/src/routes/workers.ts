@@ -143,6 +143,92 @@ router.get('/profile/me', authenticate, async (req: Request, res: Response): Pro
 });
 
 /**
+ * GET /api/workers/profile/me/earnings
+ * GET /api/workers/earnings
+ * Get authoritative worker earnings breakdown (Direct 85% + Cooperative Surplus Share 15%)
+ */
+const getWorkerEarningsHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+    const period = ((req.query.period as string) || 'month').toLowerCase();
+
+    // 1. Check worker profile
+    let workerId: string | null = null;
+    let workerProfile: any = null;
+    try {
+      const { data } = await supabaseAdmin
+        .from('workers')
+        .select('id, user_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (data) {
+        workerProfile = data;
+        workerId = data.id;
+      }
+    } catch {}
+
+    if (!workerProfile) {
+      workerProfile = inMemoryStore.getWorkerByUserId(userId) || inMemoryStore.ensureWorkerForUser(userId);
+      workerId = workerProfile?.id || null;
+    }
+
+    // 2. Fetch authoritative breakdown from inMemoryStore
+    const memoryEarnings = inMemoryStore.calculateWorkerEarnings(workerId || userId, period);
+
+    // Try fetching Supabase distributions if table exists
+    let dbDistributions: any[] = [];
+    if (workerId) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('cooperative_distributions')
+          .select('*')
+          .eq('worker_id', workerId)
+          .order('created_at', { ascending: false });
+        if (data && Array.isArray(data) && data.length > 0) {
+          dbDistributions = data;
+        }
+      } catch {}
+    }
+
+    const allDistributions = [...dbDistributions];
+    if (memoryEarnings?.distributions && Array.isArray(memoryEarnings.distributions)) {
+      for (const d of memoryEarnings.distributions) {
+        if (!allDistributions.some((item) => item.id === d.id)) {
+          allDistributions.push(d);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        period: memoryEarnings.period,
+        direct_service_earnings: memoryEarnings.directServiceEarnings,
+        cooperative_distribution: memoryEarnings.cooperativeDistribution,
+        total_earnings: memoryEarnings.totalEarnings,
+        cooperative_pool: memoryEarnings.cooperativePool,
+        worker_work_amount: memoryEarnings.workerWorkAmount,
+        work_share_percentage: memoryEarnings.workSharePercentage,
+        total_platform_work_amount: memoryEarnings.totalPlatformWorkAmount,
+        completed_jobs_count: memoryEarnings.completedJobsCount,
+        platform_completed_jobs_count: memoryEarnings.platformCompletedJobsCount,
+        wallet_balance: memoryEarnings.walletBalance,
+        distributions: allDistributions,
+      },
+    });
+  } catch (error: any) {
+    console.error('Get worker earnings error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: error?.message || 'Failed to calculate earnings' },
+    });
+  }
+};
+
+router.get('/profile/me/earnings', authenticate, requireWorker, getWorkerEarningsHandler);
+router.get('/earnings', authenticate, requireWorker, getWorkerEarningsHandler);
+
+/**
  * GET /api/workers/:id
  * Get worker profile with skills and ratings
  */

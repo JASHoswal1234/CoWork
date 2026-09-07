@@ -59,8 +59,9 @@ export function CooperativeAuth({ onSuccess }: Props) {
                   <input
                     type="email" required value={email}
                     onChange={e => setEmail(e.target.value)}
-                    placeholder="admin@cooperative.org"
+                    placeholder="Enter your email"
                     className="w-full rounded-xl border border-status-subtle bg-background-primary py-3 pl-10 pr-4 text-sm text-text-navy placeholder:text-text-tertiary focus:border-accent-primary focus:outline-none"
+                    autoComplete="off"
                   />
                 </div>
               </div>
@@ -74,8 +75,9 @@ export function CooperativeAuth({ onSuccess }: Props) {
                   <input
                     type={showPassword ? 'text' : 'password'} required value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder="Enter your password"
                     className="w-full rounded-xl border border-status-subtle bg-background-primary py-3 pl-10 pr-10 text-sm text-text-navy placeholder:text-text-tertiary focus:border-accent-primary focus:outline-none"
+                    autoComplete="off"
                   />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-tertiary">
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}

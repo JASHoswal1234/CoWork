@@ -122,16 +122,16 @@ export function WorkerAuth({ onSuccess }: Props) {
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
                   <label className="mb-1.5 block font-mono text-[10px] font-semibold tracking-[0.1em] text-text-tertiary">EMAIL</label>
-                  <div className="relative">
+                  <div className="relative mt-2">
                     <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                    <input type="email" required value={loginData.email} onChange={e => setLoginData(p => ({ ...p, email: e.target.value }))} placeholder="worker@example.com" className={inputClass} />
+                    <input type="email" required value={loginData.email} onChange={e => setLoginData(p => ({ ...p, email: e.target.value }))} placeholder="Enter your email" className={inputClass} autoComplete="off" />
                   </div>
                 </div>
                 <div>
-                  <label className="mb-1.5 block font-mono text-[10px] font-semibold tracking-[0.1em] text-text-tertiary">PASSWORD</label>
-                  <div className="relative">
+                  <label className="font-mono text-[11px] font-semibold tracking-[0.1em] text-text-tertiary">PASSWORD</label>
+                  <div className="relative mt-2">
                     <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                    <input type={showPassword ? 'text' : 'password'} required value={loginData.password} onChange={e => setLoginData(p => ({ ...p, password: e.target.value }))} placeholder="••••••••" className="w-full rounded-xl border border-status-subtle bg-background-primary py-3 pl-10 pr-10 text-sm text-text-navy placeholder:text-text-tertiary focus:border-accent-primary focus:outline-none" />
+                    <input type={showPassword ? 'text' : 'password'} required value={loginData.password} onChange={e => setLoginData(p => ({ ...p, password: e.target.value }))} placeholder="Enter your password" className="w-full rounded-xl border border-status-subtle bg-background-primary py-3 pl-10 pr-10 text-sm text-text-navy placeholder:text-text-tertiary focus:border-accent-primary focus:outline-none" autoComplete="off" />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-tertiary">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>
                   </div>
                 </div>

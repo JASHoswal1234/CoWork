@@ -8,6 +8,21 @@
 -- authentic 15% platform earnings, workforce performance, and job telemetry.
 -- ============================================================================
 
+CREATE TABLE IF NOT EXISTS public.cooperative_distributions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    worker_id UUID NOT NULL REFERENCES public.workers(id) ON DELETE CASCADE,
+    distribution_period VARCHAR(50) NOT NULL,
+    eligible_work_amount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    work_share_percentage NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+    cooperative_pool_amount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    distribution_amount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_worker_distribution_period UNIQUE (worker_id, distribution_period)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coop_dist_worker_id ON public.cooperative_distributions(worker_id);
+CREATE INDEX IF NOT EXISTS idx_coop_dist_period ON public.cooperative_distributions(distribution_period);
+
 BEGIN;
 
 DO $$
@@ -41,6 +56,15 @@ DECLARE
     v_coop_share NUMERIC;
     v_completed_time TIMESTAMPTZ;
     v_cur_bal NUMERIC;
+
+    -- Cooperative distribution variables
+    v_tot_rev NUMERIC := 0;
+    v_coop_pool NUMERIC := 0;
+    v_w_work NUMERIC := 0;
+    v_w_share_pct NUMERIC := 0;
+    v_w_dist NUMERIC := 0;
+    v_dist_w_id UUID;
+    v_dist_wal_id UUID;
 BEGIN
     -- 1. Check if demo seed has already run to guarantee idempotency
     SELECT COUNT(*) INTO v_existing_demo_count FROM public.jobs WHERE job_number LIKE 'DEMO-HIST-%';
@@ -52,7 +76,8 @@ BEGIN
 
     -- Clean up any partial historical seed if re-running
     IF v_existing_demo_count > 0 THEN
-        DELETE FROM public.wallet_transactions WHERE job_id IN (SELECT id FROM public.jobs WHERE job_number LIKE 'DEMO-HIST-%');
+        DELETE FROM public.wallet_transactions WHERE job_id IN (SELECT id FROM public.jobs WHERE job_number LIKE 'DEMO-HIST-%') OR description ILIKE '%demo-historical-2026-09%';
+        DELETE FROM public.cooperative_distributions WHERE distribution_period = 'demo-historical-2026-09';
         DELETE FROM public.payments WHERE job_id IN (SELECT id FROM public.jobs WHERE job_number LIKE 'DEMO-HIST-%');
         DELETE FROM public.jobs WHERE job_number LIKE 'DEMO-HIST-%';
     END IF;
@@ -396,7 +421,85 @@ BEGIN
         END LOOP;
     END;
 
-    RAISE NOTICE '✅ Successfully seeded 36 completed historical jobs with matching payments and wallet transactions.';
+    -- =========================================================================
+    -- 5. CALCULATE & ALLOCATE COOPERATIVE SURPLUS DISTRIBUTIONS (15% POOL)
+    -- =========================================================================
+    -- Total gross revenue across the 36 seeded completed jobs
+    SELECT COALESCE(SUM(actual_price), 0) INTO v_tot_rev
+    FROM public.jobs
+    WHERE job_number LIKE 'DEMO-HIST-%' AND status = 'completed';
+
+    v_coop_pool := ROUND(v_tot_rev * 0.15, 2);
+
+    -- Loop through each worker who completed work in this batch
+    FOR v_dist_w_id, v_w_work IN
+        SELECT worker_id, SUM(actual_price)
+        FROM public.jobs
+        WHERE job_number LIKE 'DEMO-HIST-%' AND status = 'completed' AND worker_id IS NOT NULL
+        GROUP BY worker_id
+    LOOP
+        v_w_share_pct := ROUND((v_w_work / NULLIF(v_tot_rev, 0)) * 100, 2);
+        v_w_dist := ROUND(v_coop_pool * (v_w_share_pct / 100), 2);
+
+        -- Insert cooperative distribution record (Idempotent)
+        INSERT INTO public.cooperative_distributions (
+            id,
+            worker_id,
+            distribution_period,
+            eligible_work_amount,
+            work_share_percentage,
+            cooperative_pool_amount,
+            distribution_amount,
+            created_at
+        ) VALUES (
+            gen_random_uuid(),
+            v_dist_w_id,
+            'demo-historical-2026-09',
+            v_w_work,
+            v_w_share_pct,
+            v_coop_pool,
+            v_w_dist,
+            NOW()
+        )
+        ON CONFLICT (worker_id, distribution_period) DO NOTHING;
+
+        -- Resolve worker wallet and record distribution credit
+        SELECT id, balance INTO v_dist_wal_id, v_cur_bal
+        FROM public.worker_wallets
+        WHERE worker_id = v_dist_w_id
+        LIMIT 1;
+
+        IF v_dist_wal_id IS NOT NULL THEN
+            UPDATE public.worker_wallets
+            SET
+                balance = balance + v_w_dist,
+                total_earned = total_earned + v_w_dist,
+                updated_at = NOW()
+            WHERE id = v_dist_wal_id;
+
+            INSERT INTO public.wallet_transactions (
+                id,
+                wallet_id,
+                transaction_type,
+                amount,
+                balance_after,
+                job_id,
+                description,
+                created_at
+            ) VALUES (
+                gen_random_uuid(),
+                v_dist_wal_id,
+                'cooperative_distribution',
+                v_w_dist,
+                COALESCE(v_cur_bal, 0) + v_w_dist,
+                NULL,
+                'Shram Sangam cooperative surplus distribution (15% pool) for demo-historical-2026-09',
+                NOW()
+            );
+        END IF;
+    END LOOP;
+
+    RAISE NOTICE '✅ Successfully seeded 36 completed historical jobs and allocated ₹% cooperative surplus pool back to workers.', v_coop_pool;
 END $$;
 
 COMMIT;
@@ -411,33 +514,47 @@ FROM public.jobs
 GROUP BY status
 ORDER BY status;
 
--- 2. Financial Totals & 15% Platform Split Verification
+-- 2. Financial Totals & 15% Cooperative Surplus Split Verification
 SELECT
   COUNT(*) AS completed_jobs,
   COALESCE(SUM(actual_price), 0) AS completed_revenue,
-  COALESCE(SUM(worker_earnings), 0) AS worker_earnings,
-  COALESCE(SUM(cooperative_share), 0) AS platform_earnings,
-  ROUND(COALESCE(SUM(cooperative_share), 0) / NULLIF(SUM(actual_price), 0) * 100, 2) AS platform_percentage
+  COALESCE(SUM(worker_earnings), 0) AS direct_worker_earnings_85pct,
+  COALESCE(SUM(cooperative_share), 0) AS cooperative_surplus_pool_15pct,
+  ROUND(COALESCE(SUM(cooperative_share), 0) / NULLIF(SUM(actual_price), 0) * 100, 2) AS surplus_percentage
 FROM public.jobs
 WHERE status = 'completed';
 
--- 3. Payments Verification
+-- 3. Cooperative Surplus Distributions Summary
+SELECT
+  cd.distribution_period,
+  COUNT(cd.id) AS eligible_workers_count,
+  SUM(cd.eligible_work_amount) AS total_eligible_work,
+  SUM(cd.work_share_percentage) AS total_work_share_pct,
+  MAX(cd.cooperative_pool_amount) AS total_surplus_pool,
+  SUM(cd.distribution_amount) AS total_distributed_to_workers
+FROM public.cooperative_distributions cd
+GROUP BY cd.distribution_period;
+
+-- 4. Worker Individual Work Share & Cooperative Distribution
+SELECT
+  w.id AS worker_id,
+  cd.distribution_period,
+  cd.eligible_work_amount,
+  cd.work_share_percentage,
+  cd.distribution_amount AS cooperative_share_received,
+  ww.balance AS current_wallet_balance
+FROM public.cooperative_distributions cd
+JOIN public.workers w ON w.id = cd.worker_id
+LEFT JOIN public.worker_wallets ww ON ww.worker_id = w.id
+ORDER BY cd.distribution_amount DESC;
+
+-- 5. Payments Verification
 SELECT
   status,
   COUNT(*) AS payment_count,
   COALESCE(SUM(amount), 0) AS total_paid,
-  COALESCE(SUM(worker_earnings), 0) AS worker_share,
-  COALESCE(SUM(cooperative_share), 0) AS platform_share
+  COALESCE(SUM(worker_earnings), 0) AS direct_worker_share,
+  COALESCE(SUM(cooperative_share), 0) AS cooperative_pool_share
 FROM public.payments
 GROUP BY status;
 
--- 4. Category Breakdown
-SELECT
-  service_category_name,
-  COUNT(*) AS completed_jobs_count,
-  SUM(actual_price) AS total_revenue,
-  SUM(cooperative_share) AS platform_commission_15pct
-FROM public.jobs
-WHERE status = 'completed'
-GROUP BY service_category_name
-ORDER BY completed_jobs_count DESC;
