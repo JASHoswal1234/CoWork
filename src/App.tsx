@@ -3,8 +3,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { RoleProvider, useRole } from './contexts/RoleContext';
 import { MockDataProvider } from './contexts/MockDataContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import { Header } from './components/layouts/Header';
 import { Footer } from './components/layouts/Footer';
+import { NotificationToast } from './components/notifications/NotificationToast';
 
 // Auth Pages
 import { AuthLanding } from './features/auth/AuthLanding';
@@ -70,6 +72,7 @@ function AppRoutes() {
         )}
       </main>
       <Footer />
+      <NotificationToast />
     </div>
   );
 }
@@ -78,11 +81,13 @@ function App() {
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AuthProvider>
-        <RoleProvider>
-          <MockDataProvider>
-            <AppRoutes />
-          </MockDataProvider>
-        </RoleProvider>
+        <NotificationProvider>
+          <RoleProvider>
+            <MockDataProvider>
+              <AppRoutes />
+            </MockDataProvider>
+          </RoleProvider>
+        </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>
   );

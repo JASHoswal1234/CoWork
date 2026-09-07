@@ -26,9 +26,16 @@ export async function authenticate(
   next: NextFunction
 ): Promise<void> {
   try {
+    let token = '';
     const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.query.token && typeof req.query.token === 'string') {
+      token = req.query.token;
+    }
+
+    if (!token) {
       res.status(401).json({
         success: false,
         error: {
@@ -38,8 +45,6 @@ export async function authenticate(
       });
       return;
     }
-
-    const token = authHeader.split(' ')[1];
 
     // 1. Handle Demo tokens
     if (token.startsWith('demo-token-')) {

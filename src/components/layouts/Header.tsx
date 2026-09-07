@@ -4,6 +4,8 @@ import { useRole, type Role } from '../../contexts/RoleContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { LogOut, User, Briefcase, Shield, Menu, X, ArrowRight, Sparkles } from 'lucide-react';
 
+import { NotificationBell } from '../notifications/NotificationBell';
+
 export function Header() {
   const { role, switchRole } = useRole();
   const { user, isAuthenticated, logout, demoLogin } = useAuth();
@@ -155,6 +157,9 @@ export function Header() {
         <div className="hidden sm:flex items-center gap-3">
           {isAuthenticated ? (
             <>
+              {/* Notification Bell */}
+              <NotificationBell />
+
               {/* Role Switcher Pills */}
               <div className="flex items-center rounded-full border border-status-subtle bg-background-primary p-1 shadow-sm">
                 <button
@@ -230,14 +235,17 @@ export function Header() {
           )}
         </div>
 
-        {/* Mobile menu button */}
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="flex lg:hidden items-center justify-center rounded-xl p-2 text-text-navy hover:bg-background-primary transition"
-          aria-label="Toggle navigation menu"
-        >
-          {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
+        {/* Mobile controls & menu button */}
+        <div className="flex sm:hidden items-center gap-2">
+          {isAuthenticated && <NotificationBell />}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="flex items-center justify-center rounded-xl p-2 text-text-navy hover:bg-background-primary transition"
+            aria-label="Toggle navigation menu"
+          >
+            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile dropdown menu */}

@@ -4,6 +4,7 @@ import { supabase, supabaseAdmin } from '../config/supabase';
 import { authenticate, requireCustomer, requireWorker, requireAdmin } from '../middleware/auth';
 import { createPostGISPoint, calculateDistance, estimateETA, parsePostGISPoint } from '../utils/geospatial';
 import { inMemoryStore, StoreJob, isDomainMatch, normalizeDomain } from '../db/inMemoryStore';
+import { createNotification } from '../services/notificationService';
 
 const router = Router();
 
@@ -130,6 +131,25 @@ async function matchAndDispatchWorkers(
           response: 'notified',
         });
       } catch {}
+
+      // Dispatch real-time notification to worker
+      if (worker.user_id) {
+        createNotification({
+          user_id: worker.user_id,
+          type: 'NEW_SERVICE_REQUEST',
+          title: `New ${domainName} Request`,
+          message: serviceSubcategory
+            ? `Customer requested ${serviceSubcategory} service near you.`
+            : `New ${domainName} service request available.`,
+          data: {
+            job_id: jobId,
+            domain: domainName,
+            subcategory: serviceSubcategory,
+            estimated_price: estimatedPrice,
+            distance_km: Number(worker.distance_km.toFixed(1)),
+          },
+        }).catch(err => console.warn('[Notification] Worker dispatch notify error:', err));
+      }
     }
   } catch (error) {
     console.error('[Dispatch] matchAndDispatchWorkers error:', error);
@@ -629,6 +649,37 @@ router.post('/:id/accept', [authenticate, requireWorker], async (req: Request, r
         .neq('worker_id', workerProfile.id);
     } catch {}
 
+    // Dispatch real-time notification to customer
+    if (job.customer_id) {
+      createNotification({
+        user_id: job.customer_id,
+        type: 'REQUEST_ACCEPTED',
+        title: 'Service Request Accepted',
+        message: `Your ${job.service_category_name || 'service'} request was accepted by ${job.worker_name || 'a cooperative worker'}.`,
+        data: {
+          job_id: id,
+          worker_id: workerProfile.id,
+          worker_name: job.worker_name,
+          service: job.service_category_name,
+        },
+      }).catch(err => console.warn('[Notification] Customer acceptance notify error:', err));
+    }
+
+    // Dispatch confirmation notification to worker
+    if (workerProfile.user_id) {
+      createNotification({
+        user_id: workerProfile.user_id,
+        type: 'JOB_ASSIGNED',
+        title: 'Job Confirmed',
+        message: `You accepted ${job.service_category_name || 'service request'} #${job.job_number || id.slice(0, 8)}.`,
+        data: {
+          job_id: id,
+          service: job.service_category_name,
+          customer_name: job.customer_name,
+        },
+      }).catch(err => console.warn('[Notification] Worker acceptance notify error:', err));
+    }
+
     res.json({
       success: true,
       data: {
@@ -775,6 +826,62 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
     } catch {}
 
     const earned = newStatus === 'completed' ? Math.round((job.actual_price || job.estimated_price || 600) * 0.85) : undefined;
+
+    // Send lifecycle notifications
+    if (newStatus === 'on_the_way' || newStatus === 'arrived') {
+      if (job.customer_id) {
+        createNotification({
+          user_id: job.customer_id,
+          type: 'WORKER_ON_THE_WAY',
+          title: newStatus === 'arrived' ? 'Worker Arrived' : 'Worker On The Way',
+          message: newStatus === 'arrived'
+            ? `${job.worker_name || 'Your worker'} has arrived at your location.`
+            : `${job.worker_name || 'Your worker'} is on the way to your location.`,
+          data: { job_id: id, status: newStatus },
+        }).catch(console.warn);
+      }
+    } else if (newStatus === 'in_progress') {
+      if (job.customer_id) {
+        createNotification({
+          user_id: job.customer_id,
+          type: 'JOB_STARTED',
+          title: 'Work Started',
+          message: `${job.worker_name || 'Your worker'} has started work on your service.`,
+          data: { job_id: id, status: newStatus },
+        }).catch(console.warn);
+      }
+    } else if (newStatus === 'completed') {
+      if (job.customer_id) {
+        createNotification({
+          user_id: job.customer_id,
+          type: 'JOB_COMPLETED',
+          title: 'Service Completed',
+          message: `Your ${job.service_category_name || 'service'} request has been marked complete.`,
+          data: { job_id: id, status: 'completed' },
+        }).catch(console.warn);
+      }
+      const workerUser = inMemoryStore.getWorkerById(job.worker_id);
+      const workerUserId = workerUser?.user_id;
+      if (workerUserId) {
+        createNotification({
+          user_id: workerUserId,
+          type: 'JOB_COMPLETED',
+          title: 'Job Completed',
+          message: `Job #${job.job_number || id.slice(0, 8)} completed! ₹${earned} credited to your wallet.`,
+          data: { job_id: id, earned, status: 'completed' },
+        }).catch(console.warn);
+      }
+    } else if (newStatus === 'cancelled') {
+      if (job.customer_id) {
+        createNotification({
+          user_id: job.customer_id,
+          type: 'JOB_CANCELLED',
+          title: 'Request Cancelled',
+          message: `Your ${job.service_category_name || 'service'} request has been cancelled.`,
+          data: { job_id: id, status: 'cancelled' },
+        }).catch(console.warn);
+      }
+    }
 
     res.json({
       success: true,
