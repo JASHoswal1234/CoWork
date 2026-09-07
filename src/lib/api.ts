@@ -98,9 +98,13 @@ async function request<T>(
 ): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
+
+  // Let the browser set the multipart boundary for file uploads.
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -244,6 +248,7 @@ export const workersApi = {
 
 export const jobsApi = {
   create: (payload: {
+    service_category_id?: string;
     service_category_name: string;
     service_subcategory_name?: string;
     description: string;
@@ -279,6 +284,20 @@ export const jobsApi = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
+};
+
+// ─── Files API ───────────────────────────────────────────────────────────────
+
+export const filesApi = {
+  uploadJobPhoto: (file: File) => {
+    const formData = new FormData();
+    formData.append('photo', file);
+
+    return request<{ url: string }>('/api/files/upload/job-photo', {
+      method: 'POST',
+      body: formData,
+    });
+  },
 };
 
 // ─── Payments API ─────────────────────────────────────────────────────────────

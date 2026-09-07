@@ -51,6 +51,7 @@ router.post(
       const userId = req.user!.id;
       const {
         service_category_name,
+        service_category_id,
         service_subcategory_name,
         description,
         address,
@@ -60,6 +61,25 @@ router.post(
         problem_image_urls,
         worker_id,
       } = req.body;
+
+      // The database requires the category UUID even though the UI also sends its name.
+      let categoryId = service_category_id;
+      if (!categoryId) {
+        const { data: category } = await supabase
+          .from('service_categories')
+          .select('id')
+          .eq('name', service_category_name)
+          .maybeSingle();
+        categoryId = category?.id;
+      }
+
+      if (!categoryId) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'SERVICE_CATEGORY_NOT_FOUND', message: 'Service category was not found' },
+        });
+        return;
+      }
 
       // Get customer info
       const { data: customer } = await supabase
@@ -77,6 +97,7 @@ router.post(
           customer_phone: customer?.phone || '',
           customer_location: createPostGISPoint(location.lat, location.lng),
           customer_address: address,
+          service_category_id: categoryId,
           service_category_name,
           service_subcategory_name,
           description,

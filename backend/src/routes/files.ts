@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { supabase } from '../config/supabase';
+import { supabase, supabaseAdmin } from '../config/supabase';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
@@ -30,16 +30,31 @@ async function uploadToSupabase(
   fileBuffer: Buffer,
   mimeType: string
 ): Promise<string> {
-  const { error } = await supabase.storage
+  const storage = supabaseAdmin.storage;
+  let { error } = await storage
     .from(bucket)
     .upload(filePath, fileBuffer, {
       contentType: mimeType,
       upsert: true,
     });
 
+  if (error?.message.toLowerCase().includes('bucket not found')) {
+    const { error: bucketError } = await storage.createBucket(bucket, { public: true });
+    if (bucketError && !bucketError.message.toLowerCase().includes('already exists')) {
+      throw new Error(`Upload failed: ${bucketError.message}`);
+    }
+
+    ({ error } = await storage
+      .from(bucket)
+      .upload(filePath, fileBuffer, {
+        contentType: mimeType,
+        upsert: true,
+      }));
+  }
+
   if (error) throw new Error(`Upload failed: ${error.message}`);
 
-  const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+  const { data } = storage.from(bucket).getPublicUrl(filePath);
   return data.publicUrl;
 }
 

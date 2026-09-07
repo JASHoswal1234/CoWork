@@ -5,7 +5,7 @@ import type { ServiceCategory, ServiceSubcategory } from '../../types/service';
 import { ServiceSelection } from './ServiceSelection';
 import { ServiceDetails } from './ServiceDetails';
 import { BookingForm } from './BookingForm';
-import { servicesApi, workersApi, jobsApi, mlApi } from '../../lib/api';
+import { servicesApi, workersApi, jobsApi, mlApi, filesApi } from '../../lib/api';
 
 type CustomerStage = 'browse' | 'services' | 'details' | 'request' | 'dispatch' | 'select' | 'matched';
 
@@ -171,6 +171,7 @@ export function CustomerHome() {
   const [selectedWorkerIndex, setSelectedWorkerIndex] = useState<number>(0);
   const [visibleStep, setVisibleStep] = useState(0);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [aiDiagnosisBadge, setAiDiagnosisBadge] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<CandidateDisplay[]>([]);
@@ -227,6 +228,7 @@ export function CustomerHome() {
     setSelectedSubcategoryId(null);
     setDescription('');
     setUploadedImage(null);
+    setUploadedFile(null);
     setIsDiagnosing(false);
     setAiDiagnosisBadge(null);
     setCandidates([]);
@@ -254,6 +256,7 @@ export function CustomerHome() {
     if (!file || !selectedService) return;
 
     const reader = new FileReader();
+    setUploadedFile(file);
     reader.onloadend = () => {
       setUploadedImage(reader.result as string);
     };
@@ -360,7 +363,12 @@ export function CustomerHome() {
       // PHASE 2A: Real backend job creation
       // Backend expects: { location: { lat, lng }, address, ...}
       // Backend will create PostGIS POINT(lng lat) from lat/lng
+      const uploadedPhotoUrl = uploadedFile
+        ? (await filesApi.uploadJobPhoto(uploadedFile)).url
+        : undefined;
+
       const res = await jobsApi.create({
+        service_category_id: selectedService.id,
         service_category_name: selectedService.name,
         service_subcategory_name: selectedSubcategory?.name,
         description: description.trim() || `${selectedService.name} service request`,
@@ -368,7 +376,7 @@ export function CustomerHome() {
         location: realCustomerLocation, // { lat, lng }
         estimated_price: price,
         worker_id: chosen.id, // Selected worker from search results
-        problem_image_urls: uploadedImage ? [uploadedImage] : [],
+        problem_image_urls: uploadedPhotoUrl ? [uploadedPhotoUrl] : [],
       });
 
       const jobId = res?.job?.id;

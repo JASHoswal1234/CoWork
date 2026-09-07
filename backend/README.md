@@ -28,8 +28,8 @@ cp .env.example .env
 
 Edit `.env` and add your Supabase credentials:
 - `SUPABASE_URL` - Your Supabase project URL
-- `SUPABASE_ANON_KEY` - Your Supabase anon/public key
-- `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key (for admin operations)
+- `SUPABASE_PUBLISHABLE_KEY` - Your Supabase publishable key
+- `SUPABASE_SECRET_KEY` - Your Supabase secret key (for admin operations)
 
 ### 3. Setup Database
 
