@@ -45,7 +45,7 @@ const CATEGORY_BASE: Record<string, number> = {
  * Demand forecast for next 7 days using XGBoost-inspired weighted model
  * Uses real historical data + synthetic pattern enrichment
  */
-router.get('/forecast/demand', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/forecast/demand', async (req: Request, res: Response): Promise<void> => {
   try {
     const { city, days = '7' } = req.query;
     const forecastDays = Math.min(parseInt(days as string), 14);
@@ -196,7 +196,7 @@ function checkIsFestival(date: Date): boolean {
  * GET /api/ml/analysis/skill-gaps
  * Analyzes skill gaps considering: unfilled jobs + ratings + complaints
  */
-router.get('/analysis/skill-gaps', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/analysis/skill-gaps', async (req: Request, res: Response): Promise<void> => {
   try {
     const results = [];
 
