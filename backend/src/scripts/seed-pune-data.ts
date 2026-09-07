@@ -134,7 +134,7 @@ async function seedWorkers(categoryIds: Record<string, string>) {
     });
 
     if (userError) {
-      console.error(`Worker ${i+1} auth error:`, userError.message);
+      console.error(`Worker ${i + 1} auth error:`, userError.message);
       continue;
     }
 
@@ -216,7 +216,7 @@ async function seedCustomersAndJobs(workers: any[], categoryIds: Record<string, 
     });
 
     if (error) {
-      console.error(`Customer ${i+1} error:`, error.message);
+      console.error(`Customer ${i + 1} error:`, error.message);
       continue;
     }
 
@@ -286,7 +286,7 @@ async function seedCustomersAndJobs(workers: any[], categoryIds: Record<string, 
         status,
         rating,
         review: rating && rating >= 4 ? randomFrom(['Excellent work!', 'Very professional', 'Highly recommended', 'Great service', 'Will hire again']) :
-                rating && rating < 3 ? randomFrom(['Work was okay', 'Could be better', 'Average service']) : null,
+          rating && rating < 3 ? randomFrom(['Work was okay', 'Could be better', 'Average service']) : null,
         review_date: rating ? completedAt : null,
         worker_earnings: status === 'completed' ? Number((estimatedPrice * 0.85).toFixed(2)) : null,
         cooperative_share: status === 'completed' ? Number((estimatedPrice * 0.15).toFixed(2)) : null,

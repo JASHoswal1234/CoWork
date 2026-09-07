@@ -51,6 +51,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const data = await authApi.demoLogin(role);
+      if (data.session?.access_token) {
+        setToken(data.session.access_token);
+      }
       
       // Map backend role to frontend role
       const frontendUser = {
@@ -58,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: backendRoleToFrontend(data.user.role)
       };
       
+      setStoredUser(frontendUser);
       setUser(frontendUser);
     } finally {
       setIsLoading(false);

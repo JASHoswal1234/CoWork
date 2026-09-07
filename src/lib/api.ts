@@ -251,12 +251,19 @@ export const jobsApi = {
     service_category_id?: string;
     service_category_name: string;
     service_subcategory_name?: string;
+    title?: string;
     description: string;
     address: string;
     location: { lat: number; lng: number };
-    estimated_price: number;
+    estimated_price?: number;
+    min_budget?: number;
+    max_budget?: number;
+    preferred_date?: string;
+    preferred_time?: string;
+    urgency?: 'normal' | 'urgent' | 'emergency';
     worker_id?: string;
     problem_image_urls?: string[];
+    additional_instructions?: string;
   }) => request<{ job: any }>('/api/jobs', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -267,11 +274,20 @@ export const jobsApi = {
     return request<{ jobs: any[]; pagination: any }>(`/api/jobs${qs ? '?' + qs : ''}`);
   },
 
+  getIncomingWorkerRequests: () => 
+    request<{ requests: any[] }>('/api/jobs/worker/incoming'),
+
   getById: (id: string) => request<{ job: any }>(`/api/jobs/${id}`),
 
   getStatus: (id: string) => request<{ status: string; job?: any }>(`/api/jobs/${id}/status`),
 
   accept: (id: string) => request<{ job: any }>(`/api/jobs/${id}/accept`, { method: 'POST' }),
+
+  reject: (id: string, reason?: string) => 
+    request<{ message: string }>(`/api/jobs/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
 
   updateStatus: (id: string, status: string, reason?: string) =>
     request<{ job: any }>(`/api/jobs/${id}/status`, {
@@ -382,15 +398,25 @@ export const mlApi = {
 
 export const adminApi = {
   getDashboard: () => request<any>('/api/admin/dashboard'),
-  getWorkers: (params?: { status?: string; search?: string; page?: number }) => {
+  getWorkers: (params?: { status?: string; search?: string; page?: number; limit?: number }) => {
     const qs = new URLSearchParams(params as any).toString();
     return request<{ workers: any[]; pagination: any }>(`/api/admin/workers${qs ? '?' + qs : ''}`);
   },
-  getJobs: (params?: { status?: string; page?: number }) => {
+  approveWorker: (id: string) =>
+    request(`/api/admin/workers/${id}/approve`, {
+      method: 'PATCH',
+    }),
+  rejectWorker: (id: string, reason?: string) =>
+    request(`/api/admin/workers/${id}/reject`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    }),
+  getJobs: (params?: { status?: string; page?: number; limit?: number }) => {
     const qs = new URLSearchParams(params as any).toString();
     return request<{ jobs: any[]; status_breakdown: any }>(`/api/admin/jobs${qs ? '?' + qs : ''}`);
   },
   getFinancials: () => request<any>('/api/admin/financials'),
+  getEarnings: () => request<any>('/api/admin/earnings'),
   getDisputes: () => request<{ disputes: any[] }>('/api/admin/disputes'),
   resolveDispute: (id: string, resolution: 'customer_favor' | 'worker_favor') =>
     request(`/api/admin/disputes/${id}/resolve`, {

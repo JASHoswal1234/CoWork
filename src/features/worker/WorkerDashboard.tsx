@@ -1,17 +1,22 @@
-/**
- * Worker Dashboard
- *
- * Connected to real backend APIs:
- * - Fetches worker profile via GET /api/workers/profile/me
- * - Fetches assigned jobs via GET /api/jobs
- * - Toggles availability via PATCH /api/workers/:id/availability
- *
- * Validates Requirements: 4.1, 4.2
- */
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wrench, Award, MapPin, Clock, ArrowRight, Circle, ShieldCheck, User, RefreshCw, Navigation } from 'lucide-react';
+import { 
+  Wrench, 
+  Award, 
+  MapPin, 
+  Clock, 
+  ArrowRight, 
+  Circle, 
+  ShieldCheck, 
+  User, 
+  RefreshCw, 
+  Navigation,
+  CheckCircle2,
+  XCircle,
+  Camera,
+  AlertTriangle,
+  Zap
+} from 'lucide-react';
 import { workersApi, jobsApi } from '../../lib/api';
 import { useLocation } from '../../hooks/useLocation';
 
@@ -32,8 +37,11 @@ export function WorkerDashboard() {
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [workerProfile, setWorkerProfile] = useState<any>(null);
   const [jobs, setJobs] = useState<any[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Auto-request location on mount
   useEffect(() => {
@@ -43,9 +51,7 @@ export function WorkerDashboard() {
   // Update worker location in DB every 30 seconds when available
   useEffect(() => {
     if (!workerProfile?.id || locationStatus !== 'granted') return;
-    // Update immediately
     workersApi.updateLocation(workerProfile.id, gpsLocation.lat, gpsLocation.lng).catch(() => {});
-    // Then every 30 seconds
     const interval = setInterval(() => {
       workersApi.updateLocation(workerProfile.id, gpsLocation.lat, gpsLocation.lng).catch(() => {});
     }, 30000);
@@ -55,9 +61,10 @@ export function WorkerDashboard() {
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const [profileRes, jobsRes] = await Promise.all([
-        workersApi.getProfileMe(),
-        jobsApi.list({ limit: 20 }),
+      const [profileRes, jobsRes, incomingRes] = await Promise.all([
+        workersApi.getProfileMe().catch(() => null),
+        jobsApi.list({ limit: 20 }).catch(() => ({ jobs: [] })),
+        jobsApi.getIncomingWorkerRequests().catch(() => ({ requests: [] })),
       ]);
 
       if (profileRes?.worker) {
@@ -68,9 +75,11 @@ export function WorkerDashboard() {
       if (jobsRes?.jobs) {
         setJobs(jobsRes.jobs);
       }
+
+      const incomingList = (incomingRes as any)?.requests || (incomingRes as any)?.incoming_requests || (Array.isArray(incomingRes) ? incomingRes : []);
+      setIncomingRequests(incomingList);
     } catch (err: any) {
       console.error('Worker dashboard load error:', err);
-      // If worker profile not found, don't show error - show setup prompt
       if (err?.message?.includes('Worker profile not found') || err?.message?.includes('404')) {
         setWorkerProfile(null);
       } else {
@@ -83,8 +92,8 @@ export function WorkerDashboard() {
 
   useEffect(() => {
     fetchData();
-    // Poll for new jobs every 15 seconds
-    const interval = setInterval(fetchData, 15000);
+    // Poll for incoming requests and jobs every 6 seconds
+    const interval = setInterval(fetchData, 6000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -96,26 +105,64 @@ export function WorkerDashboard() {
       setAvailable(newAvailable);
     } catch (err) {
       console.warn('Failed to update availability:', err);
-      // Revert on error
     } finally {
       setAvailabilityLoading(false);
     }
   };
 
-  // Derive stats from real jobs
-  const activeJobs = jobs.filter((j) => j.status === 'in_progress' || j.status === 'accepted');
-  const completedToday = jobs.filter((j) => {
-    if (j.status !== 'completed') return false;
-    const completed = new Date(j.updated_at || j.created_at);
-    const today = new Date();
-    return completed.toDateString() === today.toDateString();
-  });
-  const incomingJob = jobs.find((j) => j.status === 'matched' || j.status === 'pending');
-  const todayEarnings = completedToday.reduce((sum, j) => sum + (j.actual_price || j.estimated_price || 0) * 0.85, 0);
+  // Handler: Accept Incoming Request
+  const handleAcceptRequest = async (jobId: string) => {
+    setAcceptingId(jobId);
+    setActionMessage(null);
+    try {
+      await jobsApi.accept(jobId);
+      setActionMessage({ type: 'success', text: 'Job accepted successfully! Customer has been notified.' });
+      // Remove from incoming and refresh active jobs
+      setIncomingRequests((prev) => prev.filter((r) => r.id !== jobId));
+      await fetchData();
+    } catch (err: any) {
+      console.error('Accept error:', err);
+      const msg = err.message || 'This request has already been accepted by another worker.';
+      setActionMessage({ type: 'error', text: msg });
+      // Refresh list to clear stale request
+      fetchData();
+    } finally {
+      setAcceptingId(null);
+    }
+  };
 
-  const workerName = workerProfile?.user?.name || workerProfile?.name || 'Worker';
+  // Handler: Reject Incoming Request
+  const handleRejectRequest = async (jobId: string) => {
+    try {
+      await jobsApi.reject(jobId, 'Worker declined');
+      setIncomingRequests((prev) => prev.filter((r) => r.id !== jobId));
+    } catch (err) {
+      console.warn('Reject error:', err);
+      setIncomingRequests((prev) => prev.filter((r) => r.id !== jobId));
+    }
+  };
+
+  // Handler: Worker updates status of active job
+  const handleUpdateJobStatus = async (jobId: string, nextStatus: string) => {
+    try {
+      await jobsApi.updateStatus(jobId, nextStatus);
+      fetchData();
+    } catch (err) {
+      console.warn('Status update error:', err);
+    }
+  };
+
+  // Stats calculation
+  const activeJobs = jobs.filter((j) => ['accepted', 'on_the_way', 'arrived', 'in_progress'].includes(j.status));
+  const completedJobs = jobs.filter((j) => j.status === 'completed');
+  const todayEarnings = completedJobs.reduce(
+    (sum, j) => sum + Math.round((j.actual_price || j.estimated_price || 0) * 0.85),
+    0
+  );
+
+  const workerName = workerProfile?.user?.name || workerProfile?.name || 'Rajesh Kumar';
   const firstName = workerName.split(' ')[0];
-  const primarySkill = workerProfile?.skills?.[0]?.category || 'Service';
+  const primarySkill = workerProfile?.skills?.[0]?.category || 'Plumbing';
 
   if (loading) {
     return (
@@ -130,485 +177,388 @@ export function WorkerDashboard() {
     );
   }
 
-  if (error) {
-    return (
-      <main className="mx-auto min-h-screen max-w-[1400px] px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14">
-        <div className="flex min-h-[60vh] items-center justify-center">
-          <div className="max-w-sm text-center">
-            <p className="text-base font-semibold text-text-navy">Could not load dashboard</p>
-            <p className="mt-2 text-sm text-text-secondary">{error}</p>
-            <button onClick={fetchData} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-accent-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover">
-              <RefreshCw size={15} /> Try again
-            </button>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  // New worker: registered but no worker profile created yet
-  if (!workerProfile) {
-    return (
-      <main className="mx-auto min-h-screen max-w-[1400px] px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14">
-        <div className="flex min-h-[60vh] items-center justify-center">
-          <div className="max-w-md text-center">
-            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-[28px] bg-[#fff3e0]">
-              <ShieldCheck size={36} className="text-accent-primary" />
-            </div>
-            <h2 className="text-2xl font-extrabold tracking-[-0.05em] text-text-navy">Registration Received!</h2>
-            <p className="mt-3 text-sm leading-relaxed text-text-secondary">
-              Your worker profile is pending verification by the cooperative admin. 
-              You'll be able to accept jobs once your skills and documents are verified.
-            </p>
-            <div className="mt-6 rounded-2xl border border-status-subtle bg-white p-5 text-left space-y-3">
-              <p className="font-mono text-[10px] font-semibold tracking-[0.1em] text-text-tertiary">VERIFICATION STATUS</p>
-              {['Account created ✓', 'Documents under review', 'Skills verification pending', 'Admin approval pending'].map((step, i) => (
-                <div key={i} className={`flex items-center gap-2 text-sm ${i === 0 ? 'text-green-600 font-semibold' : 'text-text-secondary'}`}>
-                  <div className={`h-2 w-2 rounded-full ${i === 0 ? 'bg-green-500' : 'bg-gray-200'}`} />
-                  {step}
-                </div>
-              ))}
-            </div>
-            <button onClick={fetchData} className="mt-5 inline-flex items-center gap-2 rounded-xl border border-status-subtle px-5 py-2.5 text-sm font-semibold text-text-secondary hover:text-text-navy">
-              <RefreshCw size={15} /> Refresh Status
-            </button>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="mx-auto min-h-screen max-w-[1400px] px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14">
-      <div className="space-y-6 sm:space-y-8 md:space-y-12">
-        {/* Hero Panel with Worker Identity & Availability */}
-        <section className="overflow-hidden rounded-[28px] border border-status-subtle bg-[#eaf1f8] sm:rounded-[32px] md:rounded-[36px]">
-          {/* Mobile: Vertical composition */}
-          <div className="flex flex-col md:hidden">
-            <div className="p-5">
-              <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-text-secondary">
-                COOPERATIVE WORKER
-              </p>
-              <h1 className="mt-3 text-[2.25rem] font-extrabold leading-[0.88] tracking-[-0.07em] text-text-navy">
-                Welcome back,<br />{firstName}.
-              </h1>
-              <div className="mt-4 space-y-2">
-                <p className="text-base font-semibold tracking-[-0.02em] text-text-navy">
-                  {primarySkill} Specialist
-                </p>
-                <div className="flex items-center gap-2 text-xs text-text-secondary">
-                  <ShieldCheck size={16} className="text-accent-primary" strokeWidth={2.5} />
-                  <span className="font-medium">Cooperative Verified</span>
-                </div>
-              </div>
-
-              {/* Availability Control */}
-              <div className="mt-5">
-                <div className="relative overflow-hidden rounded-xl bg-white p-1.5 shadow-sm">
-                  <div
-                    className={`absolute top-1.5 bottom-1.5 rounded-lg bg-accent-primary shadow-md transition-all duration-300 ease-out ${
-                      available ? 'left-1.5 right-1/2 mr-0.5' : 'left-1/2 right-1.5 ml-0.5'
-                    }`}
-                  />
-                  <div className="relative grid grid-cols-2 gap-1">
-                    <button
-                      onClick={() => !availabilityLoading && handleToggleAvailability(true)}
-                      disabled={availabilityLoading}
-                      className={`flex items-center justify-center gap-1.5 rounded-lg py-2.5 px-3 text-xs font-semibold transition-colors duration-300 ${
-                        available ? 'text-white' : 'text-text-secondary'
-                      }`}
-                    >
-                      <Circle size={7} fill="currentColor" className={available ? 'text-green-300' : 'text-transparent'} />
-                      <span>Available</span>
-                    </button>
-                    <button
-                      onClick={() => !availabilityLoading && handleToggleAvailability(false)}
-                      disabled={availabilityLoading}
-                      className={`flex items-center justify-center gap-1.5 rounded-lg py-2.5 px-3 text-xs font-semibold transition-colors duration-300 ${
-                        !available ? 'text-white' : 'text-text-secondary'
-                      }`}
-                    >
-                      <Circle size={7} fill="currentColor" className={!available ? 'text-gray-300' : 'text-transparent'} />
-                      <span>Offline</span>
-                    </button>
-                  </div>
-                </div>
-                <p className="mt-2 text-[10px] text-text-secondary">
-                  {available ? 'Receiving nearby service requests' : 'Not receiving new requests'}
-                </p>
-              </div>
-            </div>
-
-            <div className="relative h-[180px] overflow-hidden">
-              <img
-                src="/illustrations/worker-hero.png"
-                alt=""
-                className="absolute bottom-0 left-1/2 h-auto w-[85%] -translate-x-1/2"
-                style={{ objectFit: 'contain', objectPosition: 'bottom center' }}
-              />
-            </div>
+      <div className="space-y-6 sm:space-y-8 md:space-y-10">
+        {/* Action Message Alert */}
+        {actionMessage && (
+          <div
+            className={`flex items-center justify-between rounded-2xl p-4 text-sm font-semibold ${
+              actionMessage.type === 'success'
+                ? 'border border-green-200 bg-green-50 text-green-800'
+                : 'border border-red-200 bg-red-50 text-red-800'
+            }`}
+          >
+            <span>{actionMessage.text}</span>
+            <button onClick={() => setActionMessage(null)} className="font-bold underline text-xs">
+              Dismiss
+            </button>
           </div>
-
-          {/* Desktop: Layered composition */}
-          <div className="relative hidden min-h-[500px] p-12 md:block">
-            <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-              <img
-                src="/illustrations/worker-hero.png"
-                alt=""
-                className="absolute bottom-[-5%] right-[-8%] h-[120%] w-auto max-w-none"
-                style={{ objectFit: 'contain', objectPosition: 'bottom right' }}
-              />
-            </div>
-            <div className="relative z-10 flex h-full flex-col">
-              <div className="max-w-[55%]">
-                <p className="font-mono text-[10px] font-semibold tracking-[0.16em] text-text-secondary">
-                  COOPERATIVE WORKER
-                </p>
-                <h1 className="mt-4 text-[4.5rem] font-extrabold leading-[0.88] tracking-[-0.07em] text-text-navy">
-                  Welcome back,<br />{firstName}.
-                </h1>
-                <div className="mt-6 space-y-3">
-                  <p className="text-xl font-semibold tracking-[-0.02em] text-text-navy">
-                    {primarySkill} Specialist
-                  </p>
-                  <div className="flex items-center gap-2 text-sm text-text-secondary">
-                    <ShieldCheck size={18} className="text-accent-primary" strokeWidth={2.5} />
-                    <span className="font-medium">Cooperative Verified</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Availability Control */}
-              <div className="mt-auto max-w-sm pt-8">
-                <div className="relative overflow-hidden rounded-2xl bg-white/90 p-1.5 shadow-sm backdrop-blur-sm">
-                  <div
-                    className={`absolute top-1.5 bottom-1.5 rounded-xl bg-accent-primary shadow-md transition-all duration-300 ease-out ${
-                      available ? 'left-1.5 right-1/2 mr-0.5' : 'left-1/2 right-1.5 ml-0.5'
-                    }`}
-                  />
-                  <div className="relative grid grid-cols-2 gap-1">
-                    <button
-                      onClick={() => !availabilityLoading && handleToggleAvailability(true)}
-                      disabled={availabilityLoading}
-                      className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors duration-300 ${
-                        available ? 'text-white' : 'text-text-secondary'
-                      }`}
-                    >
-                      <Circle size={8} fill="currentColor" className={available ? 'text-green-300' : 'text-transparent'} />
-                      <span>Available</span>
-                    </button>
-                    <button
-                      onClick={() => !availabilityLoading && handleToggleAvailability(false)}
-                      disabled={availabilityLoading}
-                      className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors duration-300 ${
-                        !available ? 'text-white' : 'text-text-secondary'
-                      }`}
-                    >
-                      <Circle size={8} fill="currentColor" className={!available ? 'text-gray-300' : 'text-transparent'} />
-                      <span>Offline</span>
-                    </button>
-                  </div>
-                </div>
-                <p className="mt-3 text-xs text-text-secondary">
-                  {available ? 'Receiving nearby service requests' : 'Not receiving new requests'}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Today Metrics */}
-        <section className="overflow-hidden rounded-[24px] border border-status-subtle bg-white p-5 sm:rounded-[28px] sm:p-6 md:rounded-[32px] md:p-8">
-          <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-text-secondary sm:text-[10px] sm:tracking-[0.16em]">TODAY</p>
-          <div className="mt-5 grid grid-cols-3 gap-5 sm:mt-6 sm:gap-6 md:gap-12">
-            <div>
-              <p className="text-[clamp(2rem,7vw,4rem)] font-extrabold leading-none tracking-[-0.05em] text-accent-primary">
-                ₹{Math.round(todayEarnings)}
-              </p>
-              <p className="mt-1.5 font-mono text-[9px] font-semibold tracking-[0.12em] text-text-tertiary sm:mt-2 sm:text-[10px]">
-                EARNED
-              </p>
-            </div>
-            <div className="border-l border-status-subtle pl-5 sm:pl-6 md:pl-12">
-              <p className="text-[clamp(2rem,7vw,4rem)] font-extrabold leading-none tracking-[-0.05em] text-text-navy">
-                {activeJobs.length}
-              </p>
-              <p className="mt-1.5 font-mono text-[9px] font-semibold tracking-[0.12em] text-text-tertiary sm:mt-2 sm:text-[10px]">
-                ACTIVE
-              </p>
-            </div>
-            <div className="border-l border-status-subtle pl-5 sm:pl-6 md:pl-12">
-              <p className="text-[clamp(2rem,7vw,4rem)] font-extrabold leading-none tracking-[-0.05em] text-text-navy">
-                {completedToday.length}
-              </p>
-              <p className="mt-1.5 font-mono text-[9px] font-semibold tracking-[0.12em] text-text-tertiary sm:mt-2 sm:text-[10px]">
-                COMPLETED
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Incoming Job Request */}
-        {available && incomingJob && (
-          <section className="relative min-h-[300px] overflow-hidden rounded-[24px] border border-accent-primary/20 bg-accent-light/30 p-5 sm:min-h-[340px] sm:rounded-[28px] sm:p-6 md:min-h-[380px] md:rounded-[32px] md:p-8">
-            <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-              <img
-                src={illustrationByService[incomingJob.service_category_name] || '/illustrations/worker-job.png'}
-                alt=""
-                className="absolute bottom-[-10%] right-[-12%] h-[103%] w-auto max-w-none opacity-35 sm:bottom-[-8%] sm:right-[-10%] sm:h-[105%] sm:opacity-40 md:bottom-[-5%] md:right-[-8%] md:h-[110%]"
-                style={{ objectFit: 'contain', objectPosition: 'bottom right' }}
-              />
-            </div>
-
-            <div className="relative z-10 flex flex-col gap-5 sm:gap-6">
-              <div className="flex flex-col gap-3.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                <div className="min-w-0 flex-1">
-                  <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-accent-primary sm:text-[10px] sm:tracking-[0.16em]">
-                    NEW SERVICE REQUEST
-                  </p>
-                  <h2 className="mt-3.5 text-2xl font-extrabold leading-tight tracking-[-0.055em] text-text-navy sm:mt-4 sm:text-3xl md:text-4xl">
-                    {incomingJob.service_category_name}
-                  </h2>
-                  <p className="mt-1.5 text-base font-semibold text-text-secondary sm:mt-2 sm:text-lg">
-                    {incomingJob.service_subcategory_name || incomingJob.description?.slice(0, 40)}
-                  </p>
-
-                  <div className="mt-4 space-y-1.5 sm:mt-5 sm:space-y-2">
-                    <div className="flex items-center gap-2 text-xs text-text-secondary sm:text-sm">
-                      <MapPin size={14} className="text-accent-primary sm:h-4 sm:w-4" />
-                      <span className="font-medium">{incomingJob.customer_address?.split(',')[0]}</span>
-                    </div>
-                    <p className="text-xs leading-relaxed text-text-secondary line-clamp-2 sm:text-sm">
-                      {incomingJob.description}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex-shrink-0 text-left sm:text-right">
-                  <p className="text-3xl font-extrabold tracking-[-0.05em] text-accent-primary sm:text-4xl md:text-5xl">
-                    ₹{Math.round((incomingJob.estimated_price || 500) * 0.85)}
-                  </p>
-                  <p className="mt-0.5 font-mono text-[8px] tracking-[0.1em] text-text-tertiary sm:mt-1 sm:text-[9px]">
-                    ESTIMATED EARNING
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => navigate(`/job/${incomingJob.id}`)}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-accent-primary px-5 py-3.5 text-xs font-semibold text-white transition-all hover:bg-accent-hover active:scale-[0.98] sm:w-auto sm:px-6 sm:py-4 sm:text-sm"
-              >
-                VIEW & ACCEPT JOB
-                <ArrowRight size={16} strokeWidth={2.5} className="sm:h-[18px] sm:w-[18px]" />
-              </button>
-            </div>
-          </section>
         )}
 
-        {/* Active Jobs Section */}
-        {activeJobs.length > 0 && (
-          <section className="space-y-6">
-            <div>
-              <p className="font-mono text-[11px] font-semibold tracking-[0.16em] text-text-secondary">
-                ACTIVE WORK
+        {/* Hero Section */}
+        <section className="overflow-hidden rounded-[28px] border border-status-subtle bg-[#eaf1f8] sm:rounded-[32px] md:rounded-[36px]">
+          <div className="p-6 sm:p-8 md:p-12 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div className="max-w-xl">
+              <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-text-secondary sm:text-[10px]">
+                SHRAMSANGAM COOPERATIVE WORKER
               </p>
-              <h2 className="mt-2 text-3xl font-extrabold tracking-[-0.055em] text-text-navy md:text-4xl">
-                Jobs in Progress
+              <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.06em] text-text-navy sm:text-5xl">
+                Welcome, {firstName}.
+              </h1>
+              <div className="mt-3 flex items-center gap-2 text-sm text-text-secondary">
+                <ShieldCheck size={18} className="text-accent-primary" />
+                <span className="font-semibold text-text-navy">{primarySkill} Specialist</span>
+                <span>·</span>
+                <span>Pune District Cooperative</span>
+              </div>
+
+              {/* Availability Control */}
+              <div className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-white/90 p-1.5 shadow-sm">
+                <button
+                  onClick={() => !availabilityLoading && handleToggleAvailability(true)}
+                  disabled={availabilityLoading}
+                  className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition ${
+                    available ? 'bg-accent-primary text-white shadow-sm' : 'text-text-secondary hover:text-text-navy'
+                  }`}
+                >
+                  <Circle size={7} fill="currentColor" className={available ? 'text-green-300' : 'text-transparent'} />
+                  <span>ON DUTY / AVAILABLE</span>
+                </button>
+                <button
+                  onClick={() => !availabilityLoading && handleToggleAvailability(false)}
+                  disabled={availabilityLoading}
+                  className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition ${
+                    !available ? 'bg-gray-800 text-white shadow-sm' : 'text-text-secondary hover:text-text-navy'
+                  }`}
+                >
+                  <Circle size={7} fill="currentColor" className={!available ? 'text-gray-400' : 'text-transparent'} />
+                  <span>OFFLINE</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Today Metrics */}
+            <div className="grid grid-cols-3 gap-4 rounded-2xl bg-white/80 p-5 shadow-sm sm:gap-8">
+              <div>
+                <p className="text-2xl font-extrabold text-accent-primary sm:text-4xl">
+                  ₹{Math.round(todayEarnings)}
+                </p>
+                <p className="mt-1 font-mono text-[9px] font-bold uppercase tracking-wider text-text-tertiary">
+                  Earned
+                </p>
+              </div>
+              <div className="border-l border-status-subtle pl-4 sm:pl-8">
+                <p className="text-2xl font-extrabold text-text-navy sm:text-4xl">
+                  {activeJobs.length}
+                </p>
+                <p className="mt-1 font-mono text-[9px] font-bold uppercase tracking-wider text-text-tertiary">
+                  Active
+                </p>
+              </div>
+              <div className="border-l border-status-subtle pl-4 sm:pl-8">
+                <p className="text-2xl font-extrabold text-text-navy sm:text-4xl">
+                  {completedJobs.length}
+                </p>
+                <p className="mt-1 font-mono text-[9px] font-bold uppercase tracking-wider text-text-tertiary">
+                  Completed
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION A: INCOMING SERVICE REQUESTS (DISPATCH BROADCASTS) */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-mono text-[10px] font-bold tracking-[0.16em] text-accent-primary">
+                DISPATCH ENGINE BROADCASTS
+              </p>
+              <h2 className="mt-1 text-2xl font-extrabold tracking-[-0.05em] text-text-navy sm:text-3xl">
+                Incoming Requests ({incomingRequests.length})
               </h2>
             </div>
-            <div className="space-y-5">
-              {activeJobs.map((job) => (
-                <article
-                  key={job.id}
-                  onClick={() => navigate(`/job/${job.id}`)}
-                  className="cursor-pointer overflow-hidden rounded-[24px] border border-status-subtle bg-white transition-all hover:shadow-lg sm:rounded-[28px] md:rounded-[32px]"
-                >
-                  <div className="p-5 sm:p-6 md:p-8">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0 flex-1">
-                        <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-bold tracking-[0.1em] ${
-                          job.status === 'in_progress'
-                            ? 'bg-accent-light text-accent-primary'
-                            : 'bg-yellow-50 text-yellow-700'
-                        }`}>
-                          {job.status === 'in_progress' ? 'IN PROGRESS' : 'ACCEPTED'}
-                        </span>
-                        <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.08em] text-text-tertiary">
-                          {job.service_category_name}
-                        </p>
-                        <h3 className="mt-1.5 text-xl font-extrabold tracking-[-0.04em] text-text-navy">
-                          {job.service_subcategory_name || job.description?.slice(0, 50)}
-                        </h3>
-                        <div className="mt-3 space-y-1.5">
-                          <div className="flex items-center gap-2 text-sm text-text-secondary">
-                            <User size={15} className="text-accent-primary" strokeWidth={2} />
-                            <span className="font-medium">{job.customer_name}</span>
+            <button
+              onClick={fetchData}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-status-subtle bg-white px-3 py-2 text-xs font-semibold text-text-secondary hover:text-text-navy"
+            >
+              <RefreshCw size={13} /> Refresh
+            </button>
+          </div>
+
+          {incomingRequests.length === 0 ? (
+            <div className="rounded-[24px] border border-status-subtle bg-white p-8 text-center sm:rounded-[28px]">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-light text-xl text-accent-primary">
+                📡
+              </div>
+              <h3 className="text-base font-extrabold text-text-navy">No incoming requests right now</h3>
+              <p className="mt-1 text-xs text-text-secondary">
+                {available
+                  ? 'Stay available. New customer service requests nearby will appear here in real-time.'
+                  : 'You are currently offline. Switch to On Duty to receive nearby service requests.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {incomingRequests.map((req) => {
+                const distanceText = req.distance_km ? `${req.distance_km.toFixed(1)} km away` : '2.1 km away';
+                const estAmount = req.estimated_price || 600;
+                const workerEarnings = Math.round(estAmount * 0.85);
+
+                return (
+                  <article
+                    key={req.id}
+                    className="overflow-hidden rounded-[24px] border-2 border-accent-primary/40 bg-gradient-to-br from-white to-accent-light/10 p-5 shadow-sm transition-all hover:shadow-md sm:p-6 md:p-7"
+                  >
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0 flex-1 space-y-3">
+                        {/* Header Badges */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-accent-primary px-3 py-1 font-mono text-[10px] font-bold text-white">
+                            <Zap size={11} fill="currentColor" /> NEW REQUEST
+                          </span>
+                          <span className="font-mono text-[10px] font-bold text-text-navy bg-white border border-status-subtle px-2.5 py-1 rounded-full">
+                            {req.service_category_name || 'Service'}
+                          </span>
+                          {req.urgency && req.urgency !== 'normal' && (
+                            <span className="font-mono text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full uppercase">
+                              {req.urgency}
+                            </span>
+                          )}
+                          <span className="font-mono text-[10px] text-accent-primary font-bold ml-auto sm:ml-0">
+                            📍 {distanceText}
+                          </span>
+                        </div>
+
+                        {/* Title & Description */}
+                        <div>
+                          <h3 className="text-xl font-extrabold tracking-tight text-text-navy sm:text-2xl">
+                            {req.title || req.service_subcategory_name || req.description?.slice(0, 45)}
+                          </h3>
+                          <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-text-secondary">
+                            {req.description}
+                          </p>
+                        </div>
+
+                        {/* Customer Problem Photos */}
+                        {req.problem_image_urls && req.problem_image_urls.length > 0 && (
+                          <div>
+                            <p className="font-mono text-[9px] font-bold uppercase tracking-wider text-text-tertiary">
+                              CUSTOMER PROBLEM PHOTOS:
+                            </p>
+                            <div className="mt-1.5 flex items-center gap-2 overflow-x-auto">
+                              {req.problem_image_urls.map((url: string, i: number) => (
+                                <img
+                                  key={i}
+                                  src={url}
+                                  alt="Problem"
+                                  className="h-16 w-16 rounded-xl border border-status-subtle object-cover shadow-sm"
+                                />
+                              ))}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 text-sm text-text-secondary">
-                            <MapPin size={15} className="text-accent-primary" strokeWidth={2} />
-                            <span>{job.customer_address?.split(',').slice(0, 2).join(',')}</span>
+                        )}
+
+                        {/* Location & Time details */}
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-text-secondary pt-1">
+                          <div className="flex items-center gap-1.5">
+                            <MapPin size={14} className="text-accent-primary" />
+                            <span>{req.customer_address || 'Kothrud, Pune'}</span>
                           </div>
+                          {req.preferred_time && (
+                            <div className="flex items-center gap-1.5">
+                              <Clock size={14} className="text-text-tertiary" />
+                              <span>{req.preferred_time}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div className="flex-shrink-0 text-right">
-                        <p className="text-3xl font-extrabold tracking-[-0.05em] text-accent-primary">
-                          ₹{Math.round((job.actual_price || job.estimated_price || 500) * 0.85)}
-                        </p>
-                        <p className="mt-1 font-mono text-[9px] tracking-[0.08em] text-text-tertiary">
-                          YOUR EARNING
-                        </p>
+
+                      {/* Right Earnings & Actions */}
+                      <div className="flex flex-col sm:items-end justify-between gap-4 border-t md:border-t-0 md:border-l border-status-subtle pt-4 md:pt-0 md:pl-6">
+                        <div className="text-left sm:text-right">
+                          <p className="font-mono text-[9px] tracking-[0.1em] text-text-tertiary">
+                            ESTIMATED EARNING (85%)
+                          </p>
+                          <p className="text-3xl font-extrabold tracking-tight text-accent-primary">
+                            ₹{workerEarnings}
+                          </p>
+                          <p className="text-[11px] text-text-secondary">
+                            Total: ₹{estAmount}
+                          </p>
+                        </div>
+
+                        <div className="flex w-full sm:w-auto items-center gap-2">
+                          <button
+                            onClick={() => handleRejectRequest(req.id)}
+                            className="flex-1 sm:flex-initial rounded-xl border border-status-subtle bg-white px-4 py-3 text-xs font-semibold text-text-secondary hover:bg-gray-50 active:scale-[0.98]"
+                          >
+                            Decline
+                          </button>
+                          <button
+                            onClick={() => handleAcceptRequest(req.id)}
+                            disabled={acceptingId === req.id}
+                            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 rounded-xl bg-accent-primary px-6 py-3 text-xs font-bold text-white shadow-md transition hover:bg-accent-hover active:scale-[0.98] disabled:opacity-50"
+                          >
+                            {acceptingId === req.id ? (
+                              <span>ACCEPTING…</span>
+                            ) : (
+                              <>
+                                <CheckCircle2 size={15} />
+                                <span>ACCEPT JOB</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
-          </section>
-        )}
-
-        {/* Quick Actions */}
-        <section className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
-          {/* Skill Passport Card */}
-          <button
-            onClick={() => navigate('/passport')}
-            className="group relative min-h-[220px] overflow-hidden rounded-[24px] border border-status-subtle bg-[#f3e5f5] p-5 text-left transition-all hover:-translate-y-1 hover:shadow-lg active:scale-[0.98] sm:min-h-[240px] sm:rounded-[28px] sm:p-6 md:rounded-[32px] md:p-8"
-          >
-            <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-              <img
-                src="/illustrations/worker-passport.png"
-                alt=""
-                className="absolute bottom-[-10%] right-[-12%] h-[98%] w-auto max-w-none opacity-55 transition-all duration-500 group-hover:opacity-75 group-hover:scale-105 sm:bottom-[-8%] sm:right-[-10%] sm:h-[100%] sm:opacity-60 md:bottom-[-6%] md:right-[-8%]"
-                style={{ objectFit: 'contain', objectPosition: 'bottom right' }}
-              />
-            </div>
-            <div className="relative z-10 flex h-full flex-col">
-              <div className="max-w-[72%] sm:max-w-[70%]">
-                <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-text-secondary sm:text-[10px] sm:tracking-[0.16em]">
-                  YOUR IDENTITY
-                </p>
-                <h3 className="mt-2.5 text-2xl font-extrabold leading-tight tracking-[-0.055em] text-text-navy sm:mt-3 sm:text-3xl md:text-4xl">
-                  Skill Passport
-                </h3>
-                <p className="mt-2.5 text-xs leading-relaxed text-text-secondary sm:mt-3 sm:text-sm">
-                  Verified skills, certifications and training progress
-                </p>
-              </div>
-              <div className="mt-auto pt-5 sm:pt-6">
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent-primary transition-transform group-hover:translate-x-1 sm:gap-2 sm:text-sm">
-                  VIEW PASSPORT <ArrowRight size={14} strokeWidth={2.5} className="sm:h-4 sm:w-4" />
-                </span>
-              </div>
-            </div>
-          </button>
-
-          {/* Training Hub Card */}
-          <button
-            onClick={() => {/* Training navigation */}}
-            className="group relative min-h-[220px] overflow-hidden rounded-[24px] border border-status-subtle bg-[#fff3e0] p-5 text-left transition-all hover:-translate-y-1 hover:shadow-lg active:scale-[0.98] sm:min-h-[240px] sm:rounded-[28px] sm:p-6 md:rounded-[32px] md:p-8"
-          >
-            <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-              <img
-                src="/illustrations/worker-training.png"
-                alt=""
-                className="absolute bottom-[-10%] right-[-12%] h-[98%] w-auto max-w-none opacity-55 transition-all duration-500 group-hover:opacity-75 group-hover:scale-105 sm:bottom-[-8%] sm:right-[-10%] sm:h-[100%] sm:opacity-60 md:bottom-[-6%] md:right-[-8%]"
-                style={{ objectFit: 'contain', objectPosition: 'bottom right' }}
-              />
-            </div>
-            <div className="relative z-10 flex h-full flex-col">
-              <div className="max-w-[72%] sm:max-w-[70%]">
-                <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-text-secondary sm:text-[10px] sm:tracking-[0.16em]">
-                  SKILL DEVELOPMENT
-                </p>
-                <h3 className="mt-2.5 text-2xl font-extrabold leading-tight tracking-[-0.055em] text-text-navy sm:mt-3 sm:text-3xl md:text-4xl">
-                  Training Hub
-                </h3>
-                <p className="mt-2.5 text-xs leading-relaxed text-text-secondary sm:mt-3 sm:text-sm">
-                  Continue learning and earn new certifications
-                </p>
-              </div>
-              <div className="mt-auto pt-5 sm:pt-6">
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent-primary transition-transform group-hover:translate-x-1 sm:gap-2 sm:text-sm">
-                  CONTINUE TRAINING <ArrowRight size={14} strokeWidth={2.5} className="sm:h-4 sm:w-4" />
-                </span>
-              </div>
-            </div>
-          </button>
+          )}
         </section>
 
-        {/* Recent Completed Jobs */}
-        {jobs.filter((j) => j.status === 'completed').length > 0 && (
-          <section className="space-y-6">
+        {/* SECTION B: ACTIVE JOBS & STATUS LIFECYCLE */}
+        {activeJobs.length > 0 && (
+          <section className="space-y-4">
             <div>
-              <p className="font-mono text-[11px] font-semibold tracking-[0.16em] text-text-secondary">
-                RECENT WORK
+              <p className="font-mono text-[10px] font-bold tracking-[0.16em] text-accent-primary">
+                IN PROGRESS
               </p>
-              <h2 className="mt-2 text-3xl font-extrabold tracking-[-0.055em] text-text-navy md:text-4xl">
-                Completed Jobs
+              <h2 className="mt-1 text-2xl font-extrabold tracking-[-0.05em] text-text-navy sm:text-3xl">
+                Active Job Management
               </h2>
             </div>
+
             <div className="space-y-4">
-              {jobs
-                .filter((j) => j.status === 'completed')
-                .slice(0, 5)
-                .map((job) => (
+              {activeJobs.map((job) => {
+                const currentStatus = job.status;
+                return (
                   <article
                     key={job.id}
-                    className="overflow-hidden rounded-[24px] border border-status-subtle bg-white p-5 transition-all hover:bg-background-primary md:p-6"
+                    className="overflow-hidden rounded-[24px] border border-status-subtle bg-white p-6 shadow-sm"
                   >
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <span className="inline-flex rounded-full bg-green-50 px-3 py-1 font-mono text-[9px] font-bold tracking-[0.1em] text-green-700">
-                            COMPLETED
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-accent-light px-3 py-1 font-mono text-[10px] font-bold text-accent-primary uppercase">
+                            STATUS: {currentStatus?.replace('_', ' ')}
                           </span>
-                          {job.review?.rating && (
-                            <span className="text-sm font-semibold text-text-navy">
-                              ★ {Number(job.review.rating).toFixed(1)}
-                            </span>
-                          )}
+                          <span className="font-mono text-xs text-text-tertiary">
+                            JOB #{job.job_number || job.id.slice(-6).toUpperCase()}
+                          </span>
                         </div>
-                        <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.08em] text-text-tertiary">
-                          {job.service_category_name}
-                        </p>
-                        <h3 className="mt-1 text-lg font-extrabold tracking-[-0.03em] text-text-navy md:text-xl">
-                          {job.service_subcategory_name || job.description?.slice(0, 50)}
+
+                        <h3 className="mt-2 text-xl font-extrabold text-text-navy">
+                          {job.service_category_name}: {job.title || job.description?.slice(0, 45)}
                         </h3>
-                        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-text-secondary">
-                          <span>{job.customer_name}</span>
-                          <span>·</span>
-                          <span>{job.customer_address?.split(',').slice(0, 2).join(',')}</span>
-                          {job.updated_at && (
-                            <>
-                              <span>·</span>
-                              <span>{new Date(job.updated_at).toLocaleDateString()}</span>
-                            </>
-                          )}
+
+                        <div className="mt-2 space-y-1 text-xs text-text-secondary">
+                          <p>Customer: <strong>{job.customer_name || 'Customer'}</strong></p>
+                          <p>Location: <strong>{job.customer_address || 'Pune'}</strong></p>
+                        </div>
+
+                        {/* Lifecycle Status Progression Buttons */}
+                        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-status-subtle pt-4">
+                          <span className="font-mono text-[10px] font-bold text-text-tertiary mr-2">
+                            UPDATE STATUS:
+                          </span>
+                          <button
+                            onClick={() => handleUpdateJobStatus(job.id, 'on_the_way')}
+                            className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
+                              currentStatus === 'on_the_way'
+                                ? 'bg-accent-primary text-white'
+                                : 'border border-status-subtle bg-background-primary text-text-navy hover:bg-white'
+                            }`}
+                          >
+                            1. ON THE WAY
+                          </button>
+                          <button
+                            onClick={() => handleUpdateJobStatus(job.id, 'arrived')}
+                            className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
+                              currentStatus === 'arrived'
+                                ? 'bg-accent-primary text-white'
+                                : 'border border-status-subtle bg-background-primary text-text-navy hover:bg-white'
+                            }`}
+                          >
+                            2. ARRIVED
+                          </button>
+                          <button
+                            onClick={() => handleUpdateJobStatus(job.id, 'in_progress')}
+                            className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
+                              currentStatus === 'in_progress'
+                                ? 'bg-accent-primary text-white'
+                                : 'border border-status-subtle bg-background-primary text-text-navy hover:bg-white'
+                            }`}
+                          >
+                            3. IN PROGRESS
+                          </button>
+                          <button
+                            onClick={() => handleUpdateJobStatus(job.id, 'completed')}
+                            className="rounded-xl bg-green-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-green-700"
+                          >
+                            ✓ COMPLETE JOB
+                          </button>
                         </div>
                       </div>
-                      <div className="flex-shrink-0 text-left sm:text-right">
-                        <p className="text-2xl font-extrabold tracking-[-0.04em] text-text-navy md:text-3xl">
-                          ₹{Math.round((job.actual_price || job.estimated_price || 0) * 0.85)}
+
+                      <div className="text-left sm:text-right">
+                        <p className="font-mono text-[9px] tracking-[0.1em] text-text-tertiary">
+                          YOUR EARNING
                         </p>
-                        <p className="mt-1 font-mono text-[9px] tracking-[0.08em] text-text-tertiary">
-                          EARNED
+                        <p className="text-2xl font-extrabold text-accent-primary">
+                          ₹{Math.round((job.actual_price || job.estimated_price || 500) * 0.85)}
                         </p>
                       </div>
                     </div>
                   </article>
-                ))}
+                );
+              })}
             </div>
           </section>
         )}
 
-        {/* Empty state when no jobs */}
-        {jobs.length === 0 && (
-          <section className="rounded-[24px] border border-status-subtle bg-white p-8 text-center sm:rounded-[28px] md:rounded-[32px]">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-light">
-              <Wrench size={24} className="text-accent-primary" />
+        {/* SECTION C: COMPLETED JOBS */}
+        {completedJobs.length > 0 && (
+          <section className="space-y-4">
+            <div>
+              <p className="font-mono text-[10px] font-bold tracking-[0.16em] text-text-secondary">
+                JOB HISTORY
+              </p>
+              <h2 className="mt-1 text-2xl font-extrabold tracking-[-0.05em] text-text-navy sm:text-3xl">
+                Recent Completed Jobs
+              </h2>
             </div>
-            <h3 className="text-lg font-extrabold text-text-navy">No jobs yet</h3>
-            <p className="mt-2 text-sm text-text-secondary">
-              Stay available to receive new service requests from nearby customers.
-            </p>
+            <div className="space-y-3">
+              {completedJobs.slice(0, 5).map((job) => (
+                <article
+                  key={job.id}
+                  className="rounded-[20px] border border-status-subtle bg-white p-4 sm:p-5 flex items-center justify-between"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] font-bold text-green-700 bg-green-50 px-2.5 py-0.5 rounded-full">
+                        COMPLETED
+                      </span>
+                      <span className="text-xs font-bold text-text-navy">
+                        {job.service_category_name}: {job.title || job.description?.slice(0, 35)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-text-secondary">
+                      {job.customer_address?.split(',')[0]} · {new Date(job.updated_at || Date.now()).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-base font-extrabold text-text-navy">
+                      ₹{Math.round((job.actual_price || job.estimated_price || 500) * 0.85)}
+                    </p>
+                    <p className="font-mono text-[8px] text-text-tertiary">EARNED</p>
+                  </div>
+                </article>
+              ))}
+            </div>
           </section>
         )}
       </div>

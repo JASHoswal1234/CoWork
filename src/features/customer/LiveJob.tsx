@@ -98,8 +98,12 @@ export function LiveJob() {
             setStage('completed');
           } else if (j.status === 'in_progress') {
             setStatusStepIndex(3);
-          } else if (j.status === 'accepted') {
+          } else if (j.status === 'arrived') {
+            setStatusStepIndex(2);
+          } else if (j.status === 'on_the_way') {
             setStatusStepIndex(1);
+          } else if (j.status === 'accepted') {
+            setStatusStepIndex(0);
           }
 
           if (j.worker_id) {
@@ -129,12 +133,18 @@ export function LiveJob() {
             setStage('completed');
           } else if (res.status === 'in_progress') {
             setStatusStepIndex(3);
+          } else if (res.status === 'arrived') {
+            setStatusStepIndex(2);
+          } else if (res.status === 'on_the_way') {
+            setStatusStepIndex(1);
+          } else if (res.status === 'accepted') {
+            setStatusStepIndex(0);
           }
         }
       } catch {
         // Polling failure fallback
       }
-    }, 4000);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [jobId, stage]);

@@ -60,13 +60,32 @@ export function AuthLanding() {
     setWorkerStep('basic');
     setDigiStatus('idle');
     setFaceStep('intro');
+    if (s === 'cooperative-auth') {
+      setLoginForm({ email: 'admin@cooperative.org', password: 'admin123' });
+    } else if (s === 'customer-auth') {
+      setLoginForm({ email: 'customer@sahakar.org', password: 'demo123' });
+    } else if (s === 'worker-auth') {
+      setLoginForm({ email: 'rajesh@sahakar.org', password: 'demo123' });
+    }
     if (role) switchRole(role === 'cooperative' ? 'cooperative' : role);
   };
 
   const handleLogin = async (role: RoleChoice) => {
     setError('');
     try {
-      await login(loginForm.email, loginForm.password);
+      let email = loginForm.email.trim();
+      let password = loginForm.password;
+      if (!email && role === 'cooperative') {
+        email = 'admin@cooperative.org';
+        password = password || 'admin123';
+      } else if (!email && role === 'customer') {
+        email = 'customer@sahakar.org';
+        password = password || 'demo123';
+      } else if (!email && role === 'worker') {
+        email = 'rajesh@sahakar.org';
+        password = password || 'demo123';
+      }
+      await login(email, password);
       switchRole(role === 'cooperative' ? 'cooperative' : role);
     } catch (e: any) { setError(e.message || 'Login failed'); }
   };
