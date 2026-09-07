@@ -1,9 +1,13 @@
 /**
  * API Client for SAHAKAR Backend
  * Centralizes all API calls and auth token management
+ * 
+ * ARCHITECTURE:
+ * Raw Backend Response → This Layer → API Adapters → Frontend Components
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+// CRITICAL: Backend runs on port 3000, not 4000
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // ─── Auth Token Management ───────────────────────────────────────────────────
 
@@ -30,6 +34,62 @@ export function setStoredUser(user: any): void {
   localStorage.setItem('sahakar_user', JSON.stringify(user));
 }
 
+// ─── Error Types ─────────────────────────────────────────────────────────────
+
+export interface ApiError {
+  code: string;
+  message: string;
+  details?: any;
+  status: number;
+}
+
+export class ApiException extends Error {
+  constructor(
+    public code: string,
+    public message: string,
+    public status: number,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'ApiException';
+  }
+
+  /**
+   * Checks if error is a specific type
+   */
+  is(code: string): boolean {
+    return this.code === code;
+  }
+
+  /**
+   * Checks if error is an authentication error
+   */
+  isAuthError(): boolean {
+    return this.code === 'UNAUTHORIZED' || this.code === 'FORBIDDEN' || this.status === 401 || this.status === 403;
+  }
+
+  /**
+   * Checks if error is a validation error
+   */
+  isValidationError(): boolean {
+    return this.code === 'VALIDATION_ERROR' || this.status === 400;
+  }
+
+  /**
+   * Checks if error is a network/server error
+   */
+  isNetworkError(): boolean {
+    return this.code === 'SERVER_UNAVAILABLE' || this.code === 'NETWORK_ERROR' || this.status === 0;
+  }
+
+  /**
+   * Checks if error is a not found error
+   */
+  isNotFoundError(): boolean {
+    return this.code === 'NOT_FOUND' || this.status === 404;
+  }
+}
+
 // ─── HTTP Client ─────────────────────────────────────────────────────────────
 
 async function request<T>(
@@ -46,18 +106,49 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+    });
 
-  const data = await res.json();
+    // Handle network errors or empty responses
+    let data: any;
+    try {
+      data = await res.json();
+    } catch (parseError) {
+      if (!res.ok) {
+        throw new ApiException(
+          'NETWORK_ERROR',
+          `Request failed: ${res.status}`,
+          res.status
+        );
+      }
+      throw parseError;
+    }
 
-  if (!res.ok) {
-    throw new Error(data.error?.message || `Request failed: ${res.status}`);
+    if (!res.ok) {
+      // Backend error response
+      throw new ApiException(
+        data.error?.code || 'REQUEST_FAILED',
+        data.error?.message || `Request failed: ${res.status}`,
+        res.status,
+        data.error?.details
+      );
+    }
+
+    return data.data ?? data;
+  } catch (error) {
+    // Network error (server unavailable)
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new ApiException(
+        'SERVER_UNAVAILABLE',
+        'Unable to connect to server. Please check your connection.',
+        0
+      );
+    }
+    throw error;
   }
-
-  return data.data ?? data;
 }
 
 // ─── Auth API ─────────────────────────────────────────────────────────────────
@@ -81,15 +172,22 @@ export const authApi = {
     }),
 
   demoLogin: async (role: 'customer' | 'worker' | 'cooperative') => {
+    // ROLE MAPPING: Frontend 'cooperative' → Backend 'admin'
+    // The backend uses 'admin' for cooperative management role
+    // Frontend uses 'cooperative' for product/UI terminology
     let email = 'customer@sahakar.org';
     let password = 'demo123';
+    
+    // Map frontend role to backend credentials
     if (role === 'worker') {
       email = 'rajesh@sahakar.org';
       password = 'demo123';
     } else if (role === 'cooperative') {
+      // Frontend 'cooperative' → Backend 'admin' user
       email = 'admin@cooperative.org';
       password = 'admin123';
     }
+    
     const data = await authApi.login(email, password);
     setToken(data.session.access_token);
     setStoredUser(data.user);

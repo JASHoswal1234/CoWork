@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authApi, getToken, setToken, clearToken, getStoredUser, setStoredUser } from '../lib/api';
+import { backendRoleToFrontend } from '../lib/apiAdapters';
 
 interface AuthContextType {
   user: any | null;
@@ -14,7 +15,17 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<any | null>(getStoredUser());
+  const [user, setUser] = useState<any | null>(() => {
+    const stored = getStoredUser();
+    // Map backend role to frontend role for stored user
+    if (stored && stored.role) {
+      return {
+        ...stored,
+        role: backendRoleToFrontend(stored.role)
+      };
+    }
+    return stored;
+  });
   const [isLoading, setIsLoading] = useState(false);
 
   const login = async (email: string, password: string) => {
@@ -22,8 +33,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await authApi.login(email, password);
       setToken(data.session.access_token);
-      setStoredUser(data.user);
-      setUser(data.user);
+      
+      // Map backend role to frontend role
+      const frontendUser = {
+        ...data.user,
+        role: backendRoleToFrontend(data.user.role)
+      };
+      
+      setStoredUser(frontendUser);
+      setUser(frontendUser);
     } finally {
       setIsLoading(false);
     }
@@ -33,7 +51,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const data = await authApi.demoLogin(role);
-      setUser(data.user);
+      
+      // Map backend role to frontend role
+      const frontendUser = {
+        ...data.user,
+        role: backendRoleToFrontend(data.user.role)
+      };
+      
+      setUser(frontendUser);
     } finally {
       setIsLoading(false);
     }
@@ -45,8 +70,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await authApi.register(payload);
       if (data.session?.access_token) {
         setToken(data.session.access_token);
-        setStoredUser(data.user);
-        setUser(data.user);
+        
+        // Map backend role to frontend role
+        const frontendUser = {
+          ...data.user,
+          role: backendRoleToFrontend(data.user.role)
+        };
+        
+        setStoredUser(frontendUser);
+        setUser(frontendUser);
       }
     } finally {
       setIsLoading(false);

@@ -10,6 +10,8 @@ import type { ServiceCategory, ServiceSubcategory } from '../../types/service';
 import { ServiceSelection } from './ServiceSelection';
 import { ServiceDetails } from './ServiceDetails';
 import { BookingForm } from './BookingForm';
+import { servicesApi, workersApi, jobsApi, mlApi } from '../../lib/api';
+import { adaptServiceCategory } from '../../lib/apiAdapters';
 
 type CustomerStage = 'browse' | 'services' | 'details' | 'request' | 'dispatch' | 'select' | 'matched';
 
@@ -168,7 +170,7 @@ export function CustomerHome() {
       );
     }
   }, []);
-  const [stage, setStage] = useState<CustomerStage>('browse');
+
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string | null>(null);
   const [description, setDescription] = useState('');
