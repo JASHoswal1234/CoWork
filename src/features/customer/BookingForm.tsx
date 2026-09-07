@@ -214,7 +214,7 @@ export function BookingForm({
             <div>
               <p className="font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">LOCATION</p>
               <div className="mt-3 flex items-center gap-3 rounded-2xl border border-status-subtle px-4 py-3 text-sm font-medium text-text-navy">
-                <MapPin size={17} className="text-accent-primary" /> Kothrud, Pune
+                <MapPin size={17} className="text-accent-primary" /> Current Service Area
                 <span className="ml-auto font-mono text-[9px] font-semibold text-accent-primary">ACTIVE NETWORK</span>
               </div>
             </div>

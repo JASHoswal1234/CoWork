@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { workersApi, jobsApi } from '../../lib/api';
 import { useLocation } from '../../hooks/useLocation';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 const illustrationByService: Record<string, string> = {
   Plumbing: '/illustrations/plumber.png',
@@ -32,6 +33,7 @@ const illustrationByService: Record<string, string> = {
 export function WorkerDashboard() {
   const navigate = useNavigate();
   const { location: gpsLocation, status: locationStatus, requestLocation } = useLocation();
+  const { notifications } = useNotifications();
 
   const [available, setAvailable] = useState(true);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
@@ -121,6 +123,13 @@ export function WorkerDashboard() {
     const interval = setInterval(fetchData, 6000);
     return () => clearInterval(interval);
   }, [fetchData]);
+
+  // Instant refresh when new real-time notification arrives
+  useEffect(() => {
+    if (notifications.length > 0) {
+      fetchData();
+    }
+  }, [notifications.length, fetchData]);
 
   const handleToggleAvailability = async (newAvailable: boolean) => {
     if (!workerProfile?.id) return;

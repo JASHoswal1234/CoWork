@@ -55,12 +55,25 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
     const { page = '1', limit = '50' } = req.query;
     const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
 
+    // Linked user and worker IDs
+    const userIds = new Set<string>([userId]);
+    const workerByUser = inMemoryStore.getWorkerByUserId(userId);
+    if (workerByUser) {
+      if (workerByUser.id) userIds.add(workerByUser.id);
+      if (workerByUser.user_id) userIds.add(workerByUser.user_id);
+    }
+    const workerById = inMemoryStore.getWorkerById(userId);
+    if (workerById) {
+      if (workerById.id) userIds.add(workerById.id);
+      if (workerById.user_id) userIds.add(workerById.user_id);
+    }
+
     let dbNotifications: any[] = [];
     try {
       const { data, error } = await supabaseAdmin
         .from('notifications')
         .select('*')
-        .eq('user_id', userId)
+        .in('user_id', Array.from(userIds))
         .order('created_at', { ascending: false });
 
       if (!error && data) {
@@ -68,9 +81,9 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
       }
     } catch {}
 
-    // Merge in-memory notifications for this user
+    // Merge in-memory notifications for this user across linked IDs
     const storeNotifications = (inMemoryStore.notifications || []).filter(
-      (n: any) => n.user_id === userId
+      (n: any) => userIds.has(n.user_id)
     );
 
     // Combine and deduplicate by id
@@ -122,9 +135,22 @@ router.patch('/:id/read', authenticate, async (req: Request, res: Response): Pro
     const { id } = req.params;
     const userId = req.user!.id;
 
+    // Linked user and worker IDs
+    const userIds = new Set<string>([userId]);
+    const workerByUser = inMemoryStore.getWorkerByUserId(userId);
+    if (workerByUser) {
+      if (workerByUser.id) userIds.add(workerByUser.id);
+      if (workerByUser.user_id) userIds.add(workerByUser.user_id);
+    }
+    const workerById = inMemoryStore.getWorkerById(userId);
+    if (workerById) {
+      if (workerById.id) userIds.add(workerById.id);
+      if (workerById.user_id) userIds.add(workerById.user_id);
+    }
+
     // Update inMemoryStore
     for (const n of inMemoryStore.notifications) {
-      if (n.id === id && n.user_id === userId) {
+      if (n.id === id && userIds.has(n.user_id)) {
         n.is_read = true;
         n.read_at = new Date().toISOString();
       }
@@ -136,7 +162,7 @@ router.patch('/:id/read', authenticate, async (req: Request, res: Response): Pro
         .from('notifications')
         .update({ is_read: true, read_at: new Date().toISOString() })
         .eq('id', id)
-        .eq('user_id', userId);
+        .in('user_id', Array.from(userIds));
     } catch {}
 
     res.json({ success: true, data: { message: 'Notification marked as read' } });
@@ -156,9 +182,22 @@ router.patch('/read-all', authenticate, async (req: Request, res: Response): Pro
   try {
     const userId = req.user!.id;
 
+    // Linked user and worker IDs
+    const userIds = new Set<string>([userId]);
+    const workerByUser = inMemoryStore.getWorkerByUserId(userId);
+    if (workerByUser) {
+      if (workerByUser.id) userIds.add(workerByUser.id);
+      if (workerByUser.user_id) userIds.add(workerByUser.user_id);
+    }
+    const workerById = inMemoryStore.getWorkerById(userId);
+    if (workerById) {
+      if (workerById.id) userIds.add(workerById.id);
+      if (workerById.user_id) userIds.add(workerById.user_id);
+    }
+
     // Update inMemoryStore
     for (const n of inMemoryStore.notifications) {
-      if (n.user_id === userId) {
+      if (userIds.has(n.user_id)) {
         n.is_read = true;
         n.read_at = new Date().toISOString();
       }
@@ -169,7 +208,7 @@ router.patch('/read-all', authenticate, async (req: Request, res: Response): Pro
       await supabaseAdmin
         .from('notifications')
         .update({ is_read: true, read_at: new Date().toISOString() })
-        .eq('user_id', userId)
+        .in('user_id', Array.from(userIds))
         .eq('is_read', false);
     } catch {}
 

@@ -123,8 +123,8 @@ export function CustomerHome() {
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | null>(null);
 
   // GPS Location
-  const [customerLocation, setCustomerLocation] = useState({ lat: 18.5074, lng: 73.8077 }); // Kothrud, Pune
-  const [customerAddress, setCustomerAddress] = useState('Kothrud, Pune');
+  const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [customerAddress, setCustomerAddress] = useState<string>('');
 
   // Active Job & Matched Worker State
   const [activeJob, setActiveJob] = useState<any>(null);
@@ -154,26 +154,28 @@ export function CustomerHome() {
       .catch((err) => console.warn('Could not load categories:', err))
       .finally(() => setServicesLoading(false));
 
-    // Get real GPS
+    // Get real GPS on mount with accurate settings
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
-          setCustomerLocation({ lat, lng });
-          try {
-            const res = await geospatialApi.reverseGeocode(lat, lng);
-            if (res?.address) {
-              setCustomerAddress(res.address);
-            } else {
-              setCustomerAddress(`Detected Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+          if (isFinite(lat) && isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            setCustomerLocation({ lat, lng });
+            try {
+              const res = await geospatialApi.reverseGeocode(lat, lng);
+              if (res?.address) {
+                setCustomerAddress(res.address);
+              } else {
+                setCustomerAddress(`Current Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+              }
+            } catch {
+              setCustomerAddress(`Current Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
             }
-          } catch {
-            setCustomerAddress(`Detected Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
           }
         },
         () => {},
-        { timeout: 8000, maximumAge: 30000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     }
   }, []);

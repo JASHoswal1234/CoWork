@@ -93,25 +93,51 @@ async function matchAndDispatchWorkers(
     );
 
     for (const smw of storeMatchingWorkers) {
-      if (!candidateWorkers.some((cw) => cw.worker_id === smw.id || cw.user_id === smw.user_id)) {
-        candidateWorkers.push({
-          worker_id: smw.id,
-          user_id: smw.user_id,
-          name: smw.name,
-          phone: smw.phone,
-          photo_url: smw.photo_url,
-          distance_km: calculateDistance(lat, lng, smw.location.lat, smw.location.lng),
-          rating: smw.rating,
-          completed_jobs: smw.completed_jobs,
-        });
+      candidateWorkers.push({
+        worker_id: smw.id,
+        user_id: smw.user_id,
+        name: smw.name,
+        phone: smw.phone,
+        photo_url: smw.photo_url,
+        distance_km: calculateDistance(lat, lng, smw.location.lat, smw.location.lng),
+        rating: smw.rating,
+        completed_jobs: smw.completed_jobs,
+      });
+    }
+
+    // Deduplicate candidate workers uniquely by worker_id, user_id, and name
+    const seenWorkerIds = new Set<string>();
+    const seenUserIds = new Set<string>();
+    const seenNames = new Set<string>();
+    const uniqueCandidateWorkers: any[] = [];
+
+    for (const w of candidateWorkers) {
+      let resolvedUserId = w.user_id;
+      if (!resolvedUserId && w.worker_id) {
+        const memW = inMemoryStore.getWorkerById(w.worker_id);
+        if (memW?.user_id) resolvedUserId = memW.user_id;
       }
+      w.user_id = resolvedUserId;
+
+      const nameKey = (w.name || '').trim().toLowerCase();
+      if (
+        (w.worker_id && seenWorkerIds.has(w.worker_id)) ||
+        (w.user_id && seenUserIds.has(w.user_id)) ||
+        (nameKey && seenNames.has(nameKey))
+      ) {
+        continue;
+      }
+      if (w.worker_id) seenWorkerIds.add(w.worker_id);
+      if (w.user_id) seenUserIds.add(w.user_id);
+      if (nameKey) seenNames.add(nameKey);
+      uniqueCandidateWorkers.push(w);
     }
 
     const domainName = normalizeDomain(serviceCategory);
-    console.log(`[Dispatch] Broadcasting domain "${domainName}" demand ${jobId} to ${candidateWorkers.length} eligible workers`);
+    console.log(`[Dispatch] Broadcasting domain "${domainName}" demand ${jobId} to ${uniqueCandidateWorkers.length} eligible workers`);
 
     // 3. Dispatch to ALL candidate workers in the domain
-    for (const worker of candidateWorkers) {
+    for (const worker of uniqueCandidateWorkers) {
       inMemoryStore.dispatchAttempts.push({
         id: `dispatch-${Math.random().toString(36).substring(2, 9)}`,
         job_id: jobId,

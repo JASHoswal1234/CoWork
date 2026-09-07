@@ -21,8 +21,8 @@ import { filesApi, mlApi, geospatialApi } from '../../lib/api';
 interface CreateServiceRequestProps {
   categories: ServiceCategory[];
   initialCategory?: ServiceCategory | null;
-  customerLocation: { lat: number; lng: number };
-  customerAddress: string;
+  customerLocation?: { lat: number; lng: number } | null;
+  customerAddress?: string;
   onBack: () => void;
   onSubmit: (requestData: {
     serviceCategoryId?: string;
@@ -82,10 +82,10 @@ export function CreateServiceRequest({
   } | null>(null);
 
   // 3. Location
-  const [address, setAddress] = useState(initialAddress || 'Kothrud, Pune');
-  const [location, setLocation] = useState(initialLocation || { lat: 18.5074, lng: 73.8077 });
+  const [address, setAddress] = useState(initialAddress || '');
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(initialLocation || null);
   const [isLocating, setIsLocating] = useState(false);
-  const [locationDetected, setLocationDetected] = useState(false);
+  const [locationDetected, setLocationDetected] = useState(Boolean(initialLocation));
 
   // 4. Preferred Date & Time
   const todayStr = new Date().toISOString().split('T')[0];
@@ -127,7 +127,25 @@ export function CreateServiceRequest({
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords;
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+
+        if (
+          typeof lat !== 'number' ||
+          typeof lng !== 'number' ||
+          !isFinite(lat) ||
+          !isFinite(lng) ||
+          lat < -90 ||
+          lat > 90 ||
+          lng < -180 ||
+          lng > 180
+        ) {
+          setIsLocating(false);
+          setFormError('Unable to determine valid GPS coordinates. Please try again.');
+          return;
+        }
+
+        // Store true browser GPS coordinates
         setLocation({ lat, lng });
 
         try {
@@ -135,43 +153,41 @@ export function CreateServiceRequest({
           if (res && res.address) {
             setAddress(res.address);
           } else {
-            setAddress(`Detected Location (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
+            setAddress('Current Location');
           }
-          setLocationDetected(true);
-          setTimeout(() => setLocationDetected(false), 4000);
         } catch (geoErr) {
           console.warn('Reverse geocode error:', geoErr);
-          setAddress(`Detected Location (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
-          setLocationDetected(true);
-          setTimeout(() => setLocationDetected(false), 4000);
+          setAddress('Current Location');
         } finally {
           setIsLocating(false);
+          setLocationDetected(true);
+          setTimeout(() => setLocationDetected(false), 5000);
         }
       },
       (err: GeolocationPositionError) => {
         setIsLocating(false);
         setLocationDetected(false);
-        let userMessage = 'Unable to determine your current location. Please try again or enter your address manually.';
+        let userMessage = 'Unable to determine your current location. Please try again.';
 
         switch (err.code) {
           case err.PERMISSION_DENIED:
             userMessage = 'Location permission was denied. Please allow location access in your browser settings and try again.';
             break;
           case err.POSITION_UNAVAILABLE:
-            userMessage = 'Unable to determine your current location. Please try again or enter your address manually.';
+            userMessage = 'Unable to determine your current location. Please try again.';
             break;
           case err.TIMEOUT:
             userMessage = 'Location request timed out. Please try again.';
             break;
           default:
-            userMessage = 'Unable to retrieve current location. Please enter your address manually.';
+            userMessage = 'Unable to determine your current location. Please try again.';
         }
         setFormError(userMessage);
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 30000,
+        timeout: 15000,
+        maximumAge: 0,
       }
     );
   };
@@ -305,7 +321,7 @@ export function CreateServiceRequest({
         title: title.trim(),
         description: finalDescription,
         address: address.trim(),
-        location,
+        location: location || { lat: 18.5204, lng: 73.8567 },
         preferredDate: effectiveDate,
         preferredTime: effectiveTime,
         urgency,

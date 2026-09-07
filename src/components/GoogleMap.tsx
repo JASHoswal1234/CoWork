@@ -23,8 +23,8 @@ function loadGoogleMaps(): Promise<void> {
   if ((window as GoogleMapsWindow).google?.maps) return Promise.resolve();
   if (googleMapsLoader) return googleMapsLoader;
 
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-  if (!apiKey) return Promise.reject(new Error('Missing VITE_GOOGLE_MAPS_API_KEY'));
+  const apiKey = import.meta.env.GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return Promise.reject(new Error('Missing GOOGLE_MAPS_API_KEY'));
 
   googleMapsLoader = new Promise((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>('script[data-google-maps]');
@@ -169,7 +169,7 @@ export function GoogleMap({
         <div>
           <MapPin className="mx-auto text-accent-primary" size={28} />
           <p className="mt-3 text-sm font-semibold text-text-navy">Map unavailable</p>
-          <p className="mt-1 text-xs text-text-secondary">Add VITE_GOOGLE_MAPS_API_KEY to enable live map.</p>
+          <p className="mt-1 text-xs text-text-secondary">Add GOOGLE_MAPS_API_KEY to enable live map.</p>
         </div>
       </div>
     );
