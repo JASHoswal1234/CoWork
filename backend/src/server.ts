@@ -4,6 +4,12 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import testRoutes from './routes/test';
+import workerRoutes from './routes/workers';
+import geospatialRoutes from './routes/geospatial';
+import jobRoutes from './routes/jobs';
+import paymentRoutes from './routes/payments';
+import reviewRoutes from './routes/reviews';
+import fileRoutes from './routes/files';
 
 // Load environment variables
 dotenv.config();
@@ -47,6 +53,13 @@ app.get('/api', (req: Request, res: Response) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/test', testRoutes);
+app.use('/api/workers', workerRoutes);
+app.use('/api/admin/workers', workerRoutes);
+app.use('/api/geospatial', geospatialRoutes);
+app.use('/api/jobs', jobRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/files', fileRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

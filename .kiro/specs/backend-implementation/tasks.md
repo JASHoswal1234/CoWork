@@ -109,22 +109,22 @@ This implementation plan breaks down the backend development into discrete, incr
 
 ### Phase 2: Core Job Flow and Geospatial Matching (Hours 8-20)
 
-- [ ] 5. Implement worker profile management
-  - [ ] 5.1 Create worker registration and profile endpoints
+- [x] 5. Implement worker profile management
+  - [x] 5.1 Create worker registration and profile endpoints
     - POST /api/workers - Create worker profile after user registration (role=worker)
     - Include skills (array), bio, location (lat/lng), service_radius_km, hourly_rate
     - Store location as PostGIS POINT(lng lat)
     - Set initial status='pending' for admin approval
     - _Requirements: 2.1, 2.4, 2.9_
   
-  - [ ] 5.2 Implement worker profile CRUD
+  - [x] 5.2 Implement worker profile CRUD
     - GET /api/workers/:id - Get worker profile with average rating and reviews count
     - PATCH /api/workers/:id - Update worker profile (protected: own profile or admin)
     - PATCH /api/workers/:id/location - Update current location
     - PATCH /api/workers/:id/availability - Toggle is_available status
     - _Requirements: 2.1, 2.9, 3.4_
   
-  - [ ] 5.3 Implement admin worker verification endpoints
+  - [x] 5.3 Implement admin worker verification endpoints
     - GET /api/admin/workers/pending - List workers with status='pending'
     - PATCH /api/admin/workers/:id/approve - Set status='active'
     - PATCH /api/admin/workers/:id/reject - Set status='rejected' with reason
@@ -135,13 +135,13 @@ This implementation plan breaks down the backend development into discrete, incr
   - **Property 3: Worker Profile State Transitions**
   - **Validates: Requirements 2.6, 2.7, 2.8, 2.9**
 
-- [ ] 6. Implement geospatial worker matching service
-  - [ ] 6.1 Create geospatial calculation utilities
+- [x] 6. Implement geospatial worker matching service
+  - [x] 6.1 Create geospatial calculation utilities
     - calculateDistance(lat1, lng1, lat2, lng2) using haversine formula
     - estimateETA(distanceKm) - simple time estimate (distance / avg_speed)
     - _Requirements: 3.5, 3.8_
   
-  - [ ] 6.2 Implement worker search with PostGIS
+  - [x] 6.2 Implement worker search with PostGIS
     - POST /api/geospatial/workers/search - Find nearby workers
     - Call find_nearby_workers PostgreSQL function with 10km radius
     - If no results, retry with 25km radius
@@ -150,7 +150,7 @@ This implementation plan breaks down the backend development into discrete, incr
     - Return worker details with distance_meters and eta_minutes
     - _Requirements: 3.1, 3.2, 3.3, 3.7_
   
-  - [ ] 6.3 Implement location update endpoint
+  - [x] 6.3 Implement location update endpoint
     - POST /api/geospatial/workers/location - Update worker current_location
     - Validate worker_id matches authenticated user
     - Update location and location_updated_at timestamp
@@ -168,8 +168,8 @@ This implementation plan breaks down the backend development into discrete, incr
   - **Property 6: Worker Ranking Consistency**
   - **Validates: Requirements 3.2, 3.7, 3.8**
 
-- [ ] 7. Implement job lifecycle management
-  - [ ] 7.1 Create job creation endpoint with validation
+- [x] 7. Implement job lifecycle management
+  - [x] 7.1 Create job creation endpoint with validation
     - POST /api/jobs - Create new job
     - Validate required fields: service_type, location {lat, lng}, address, description
     - Set status='created', payment_status='pending'
@@ -177,7 +177,7 @@ This implementation plan breaks down the backend development into discrete, incr
     - If photos provided, store in job.photos array (URLs from file upload)
     - _Requirements: 4.1, 4.10_
   
-  - [ ] 7.2 Implement job matching algorithm
+  - [x] 7.2 Implement job matching algorithm
     - After job creation, call geospatial search to find top 3 workers
     - If workers found, select closest worker and assign
     - Update job: worker_id, status='assigned', assigned_at
@@ -185,7 +185,7 @@ This implementation plan breaks down the backend development into discrete, incr
     - Create notification for worker
     - _Requirements: 4.2, 4.3_
   
-  - [ ] 7.3 Implement job acceptance endpoints
+  - [x] 7.3 Implement job acceptance endpoints
     - POST /api/jobs/:id/accept - Worker accepts job
     - Validate job.worker_id matches authenticated worker
     - Validate current status='assigned'
@@ -193,7 +193,7 @@ This implementation plan breaks down the backend development into discrete, incr
     - Create notification for customer
     - _Requirements: 4.4, 4.5_
   
-  - [ ] 7.4 Implement job status transition endpoints
+  - [x] 7.4 Implement job status transition endpoints
     - PATCH /api/jobs/:id/status - Update job status
     - Validate state transitions using isValidTransition() function
     - Allowed transitions: created→assigned→accepted→in_progress→completed→verified
@@ -201,14 +201,14 @@ This implementation plan breaks down the backend development into discrete, incr
     - Broadcast status update via Supabase Realtime
     - _Requirements: 4.6, 4.7, 4.8, 4.9_
   
-  - [ ] 7.5 Implement job retrieval endpoints
+  - [x] 7.5 Implement job retrieval endpoints
     - GET /api/jobs/:id - Get job details with embedded worker/customer info
     - GET /api/jobs - List jobs with filters (status, customer_id, worker_id)
     - Support pagination: ?page=1&limit=20
     - Support sorting: ?sort_by=created_at&order=desc
     - _Requirements: 4.11, 15.5, 15.7_
   
-  - [ ] 7.6 Implement dispute handling
+  - [x] 7.6 Implement dispute handling
     - POST /api/jobs/:id/dispute - Customer disputes completion
     - Update status='disputed'
     - Create notification for admin
@@ -230,20 +230,20 @@ This implementation plan breaks down the backend development into discrete, incr
 
 ### Phase 3: Payments, Reviews, and File Upload (Hours 20-28)
 
-- [ ] 9. Implement payment simulation service
-  - [ ] 9.1 Create payment calculation utilities
+- [-] 9. Implement payment simulation service
+  - [x] 9.1 Create payment calculation utilities
     - calculateJobPrice(hourlyRate, durationHours) - estimate price
     - splitPayment(amount) - return {workerAmount: 85%, cooperativeAmount: 15%}
     - _Requirements: 5.1, 5.3_
   
-  - [ ] 9.2 Implement payment initiation (simulation mode for demo)
+  - [x] 9.2 Implement payment initiation (simulation mode for demo)
     - POST /api/payments/create-order - Create payment record
     - Store job_id, amount, status='pending'
     - For hackathon: Return mock order data {orderId, amount}
     - For production integration: Create Razorpay order
     - _Requirements: 5.2_
   
-  - [ ] 9.3 Implement payment completion and wallet crediting
+  - [x] 9.3 Implement payment completion and wallet crediting
     - POST /api/payments/verify - Mark payment as completed
     - For hackathon: Accept {orderId, status: 'success'|'failed'}
     - For production: Verify Razorpay signature
@@ -254,14 +254,14 @@ This implementation plan breaks down the backend development into discrete, incr
     - Use database transaction for atomicity
     - _Requirements: 5.2, 5.3, 5.6_
   
-  - [ ] 9.4 Implement wallet and payout endpoints
+  - [x] 9.4 Implement wallet and payout endpoints
     - GET /api/workers/:id/wallet - Get wallet balance
     - GET /api/workers/:id/transactions - Get transaction history
     - POST /api/workers/:id/payout - Request payout (status='pending' for admin approval)
     - PATCH /api/admin/payouts/:id/approve - Admin approves payout, call deduct_from_wallet()
     - _Requirements: 5.5, 5.6_
   
-  - [ ] 9.5 Implement refund handling for disputes
+  - [x] 9.5 Implement refund handling for disputes
     - POST /api/payments/refund - Process refund for disputed job
     - Reverse wallet transaction: call deduct_from_wallet() for worker
     - Update transaction status='refunded', job.payment_status='refunded'
@@ -280,27 +280,27 @@ This implementation plan breaks down the backend development into discrete, incr
   - **Validates: Requirements 5.6**
 
 - [ ] 10. Implement review and rating system
-  - [ ] 10.1 Create review submission endpoint
+  - [x] 10.1 Create review submission endpoint
     - POST /api/reviews - Submit review after job completion
     - Validate: rating 1-5, job_id references completed job, customer is job creator
     - Create review record with job_id, customer_id, worker_id, rating, comment
     - UNIQUE constraint on job_id ensures one review per job
     - _Requirements: 6.1, 6.2_
   
-  - [ ] 10.2 Implement rating recalculation
+  - [x] 10.2 Implement rating recalculation
     - After review creation, recalculate worker average rating
     - Query all reviews for worker, calculate mean rating
     - Update workers.average_rating and workers.total_reviews
     - If rating < 3, flag worker for admin review (create notification)
     - _Requirements: 6.3, 6.4_
   
-  - [ ] 10.3 Implement review retrieval endpoints
+  - [x] 10.3 Implement review retrieval endpoints
     - GET /api/reviews/worker/:id - Get reviews for worker (paginated)
     - Anonymize customer names: "Customer A", "Customer B"
     - Return average_rating and total_reviews in response
     - _Requirements: 6.5, 6.6_
   
-  - [ ] 10.4 Implement worker response to reviews
+  - [x] 10.4 Implement worker response to reviews
     - POST /api/reviews/:id/respond - Worker adds response to review
     - Update review.worker_response and review.responded_at
     - _Requirements: 6.7_
@@ -314,19 +314,19 @@ This implementation plan breaks down the backend development into discrete, incr
   - **Validates: Requirements 6.3, 6.5**
 
 - [ ] 11. Implement file upload service using Supabase Storage
-  - [ ] 11.1 Setup Supabase Storage buckets
+  - [x] 11.1 Setup Supabase Storage buckets
     - Create buckets via Supabase dashboard: 'profile-photos', 'job-images', 'documents'
     - Configure 'documents' bucket as private (admin-only access)
     - Configure other buckets as public
     - _Requirements: 12.6, 12.9_
   
-  - [ ] 11.2 Create file upload validation middleware
+  - [x] 11.2 Create file upload validation middleware
     - Validate file type in [jpg, png, jpeg, pdf, webp]
     - Validate file size ≤ 5MB
     - Return 400 Bad Request with specific error if validation fails
     - _Requirements: 12.1, 12.2, 12.4_
   
-  - [ ] 11.3 Implement file upload endpoints
+  - [x] 11.3 Implement file upload endpoints
     - POST /api/files/upload/profile-photo - Upload profile photo
     - POST /api/files/upload/job-photo - Upload job photo
     - POST /api/files/upload/worker-document - Upload KYC/certificate (worker only)
@@ -335,7 +335,7 @@ This implementation plan breaks down the backend development into discrete, incr
     - Return public URL in response
     - _Requirements: 12.3, 12.5, 12.6, 12.7_
   
-  - [ ] 11.4 Integrate file uploads with existing endpoints
+  - [x] 11.4 Integrate file uploads with existing endpoints
     - Update workers table: profile_image_url column
     - Update jobs: append photo URLs to photos array using append_job_photo()
     - Create worker_documents records on document upload
