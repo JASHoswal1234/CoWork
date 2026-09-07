@@ -270,7 +270,7 @@ async function seedCustomersAndJobs(workers: any[], categoryIds: Record<string, 
       await supabase.from('jobs').insert({
         customer_id: customer.id,
         customer_name: customer.name,
-        customer_phone: customer.phone || '+919999999999',
+        customer_phone: (customer as any).phone || '+919999999999',
         customer_location: `POINT(${lng} ${lat})`,
         customer_address: `${Math.floor(randomFloat(1, 500))}, ${area.name}, Pune`,
         service_category_id: catId,
