@@ -1,51 +1,39 @@
 /**
- * Operations Dashboard
- * 
- * PRIORITY SCREEN #4: Cooperative operations with KPIs and workforce map
- * Phase 3: Premium editorial redesign - Workforce Intelligence Control Layer
- * 
- * Validates Requirements: 6.1-6.7, 14.5, 16.5, 7.1-7.5
+ * Operations Dashboard - Connected to real backend API
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, GraduationCap, MapPin, Clock, User, Users, Briefcase, DollarSign, Activity, ArrowRight } from 'lucide-react';
-import { useMockData } from '../../contexts/MockDataContext';
+import { TrendingUp, GraduationCap, MapPin, User, Users, Briefcase, DollarSign, Activity, ArrowRight } from 'lucide-react';
+import { adminApi, jobsApi } from '../../lib/api';
 
 export function OperationsDashboard() {
   const navigate = useNavigate();
-  const { jobs, workers } = useMockData();
+  const [dashboard, setDashboard] = useState<any>(null);
+  const [recentJobs, setRecentJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Get active jobs (in-progress and accepted)
-  const activeJobs = jobs.filter(job => 
-    job.status === 'in-progress' || job.status === 'accepted'
-  );
+  useEffect(() => {
+    Promise.all([
+      adminApi.getDashboard().catch(() => null),
+      jobsApi.list({ status: 'accepted', limit: 10 }).catch(() => ({ jobs: [] })),
+    ]).then(([dash, jobsData]) => {
+      setDashboard(dash);
+      setRecentJobs((jobsData as any)?.jobs || []);
+    }).finally(() => setLoading(false));
+  }, []);
 
-  // Get today's completed jobs
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const completedToday = jobs.filter(job => {
-    if (job.status !== 'completed' || !job.completedAt) return false;
-    const completedDate = new Date(job.completedAt);
-    completedDate.setHours(0, 0, 0, 0);
-    return completedDate.getTime() === today.getTime();
-  });
-
-  // Calculate today's revenue
-  const todayRevenue = completedToday.reduce((sum, job) => sum + (job.actualPrice || job.estimatedPrice), 0);
-  const cooperativeShare = todayRevenue * 0.15;
-
-  // Count available workers
-  const availableWorkers = workers.filter(w => w.available).length;
-
-  const kpis = {
-    activeJobs: activeJobs.length,
-    availableWorkers: availableWorkers,
-    totalWorkers: workers.length,
-    completedToday: completedToday.length,
-    todayRevenue: todayRevenue,
-    cooperativeShare: cooperativeShare,
-    workerEarnings: todayRevenue * 0.85
+  const kpis = dashboard ? {
+    activeJobs: dashboard.overview?.pending_jobs || 0,
+    availableWorkers: dashboard.overview?.active_workers || 0,
+    totalWorkers: dashboard.overview?.active_workers || 0,
+    completedToday: dashboard.performance?.today_jobs || 0,
+    todayRevenue: dashboard.financials?.total_revenue || 0,
+    cooperativeShare: dashboard.financials?.cooperative_earnings || 0,
+    workerEarnings: (dashboard.financials?.total_revenue || 0) * 0.85,
+  } : {
+    activeJobs: 0, availableWorkers: 0, totalWorkers: 0,
+    completedToday: 0, todayRevenue: 0, cooperativeShare: 0, workerEarnings: 0,
   };
 
   // Simulated Pune workforce areas
@@ -387,17 +375,14 @@ export function OperationsDashboard() {
             </h2>
           </div>
           
-          {activeJobs.length === 0 ? (
+          {recentJobs.length === 0 ? (
             <div className="rounded-[20px] border border-status-subtle bg-white p-8 text-center sm:rounded-[24px] sm:p-10 md:rounded-[28px] md:p-12">
               <Users size={40} className="mx-auto text-text-secondary opacity-40 sm:h-[48px] sm:w-[48px]" strokeWidth={1.5} />
               <p className="mt-3 text-sm text-text-secondary sm:mt-4 sm:text-base">No active jobs at the moment</p>
             </div>
           ) : (
             <div className="space-y-3 sm:space-y-4">
-              {activeJobs.map((job) => {
-                const worker = workers.find(w => w.id === job.assignedWorkerId);
-                
-                return (
+              {recentJobs.map((job: any) => (
                   <article 
                     key={job.id}
                     className="overflow-hidden rounded-[20px] border border-status-subtle bg-white p-4 transition-all hover:border-accent-primary/30 hover:bg-accent-light/10 sm:rounded-[24px] sm:p-5 md:p-6"
@@ -405,54 +390,38 @@ export function OperationsDashboard() {
                     <div className="flex flex-col gap-3.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                          <span className={`inline-flex rounded-full px-2.5 py-1 font-mono text-[8px] font-bold tracking-[0.1em] sm:px-3 sm:text-[9px] ${
-                            job.status === 'in-progress' 
-                              ? 'bg-accent-primary text-white' 
-                              : 'bg-text-navy text-white'
-                          }`}>
-                            {job.status === 'in-progress' ? 'IN PROGRESS' : 'ACCEPTED'}
+                          <span className="inline-flex rounded-full bg-accent-primary px-2.5 py-1 font-mono text-[8px] font-bold tracking-[0.1em] text-white sm:px-3 sm:text-[9px]">
+                            {job.status.toUpperCase().replace('_', ' ')}
                           </span>
                           <span className="font-mono text-[9px] tracking-[0.08em] text-text-tertiary sm:text-[10px]">
-                            ID: {job.id}
+                            {job.job_number}
                           </span>
                         </div>
                         <h3 className="mt-2.5 text-lg font-extrabold tracking-[-0.03em] text-text-navy sm:mt-3 sm:text-xl md:text-2xl">
-                          {job.serviceCategory} · {job.serviceSubcategory}
+                          {job.service_category_name}
                         </h3>
                         <p className="mt-1.5 text-xs leading-relaxed text-text-secondary line-clamp-2 sm:mt-2 sm:text-sm">
                           {job.description}
                         </p>
-                        
-                        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary sm:mt-4 sm:gap-x-5 sm:gap-y-2 sm:text-sm">
+                        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary sm:mt-4">
                           <div className="flex items-center gap-1.5">
-                            <User size={14} className="text-text-tertiary sm:h-[15px] sm:w-[15px]" strokeWidth={2} />
-                            <span>{job.customerName}</span>
+                            <User size={14} className="text-text-tertiary" strokeWidth={2} />
+                            <span>{job.customer_name}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <User size={14} className="text-accent-primary sm:h-[15px] sm:w-[15px]" strokeWidth={2} />
-                            <span className="font-medium text-text-navy">
-                              {worker ? worker.name : 'Assigning...'}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <MapPin size={14} className="text-text-tertiary sm:h-[15px] sm:w-[15px]" strokeWidth={2} />
-                            <span className="line-clamp-1">{job.customerLocation.address.split(',').slice(0, 2).join(',')}</span>
+                            <MapPin size={14} className="text-text-tertiary" strokeWidth={2} />
+                            <span className="line-clamp-1">{job.customer_address}</span>
                           </div>
                         </div>
                       </div>
-
                       <div className="flex-shrink-0 text-left sm:text-right">
-                        <p className="text-2xl font-extrabold tracking-[-0.04em] text-accent-primary sm:text-3xl md:text-4xl">
-                          ₹{job.estimatedPrice}
-                        </p>
-                        <p className="mt-0.5 font-mono text-[8px] tracking-[0.08em] text-text-tertiary sm:mt-1 sm:text-[9px]">
-                          WORKER: ₹{job.workerEarnings}
+                        <p className="text-2xl font-extrabold tracking-[-0.04em] text-accent-primary sm:text-3xl">
+                          ₹{job.estimated_price}
                         </p>
                       </div>
                     </div>
                   </article>
-                );
-              })}
+                ))}
             </div>
           )}
         </section>

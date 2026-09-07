@@ -1,40 +1,62 @@
 /**
- * Demand Intelligence Page
- * 
- * PRIORITY SCREEN #5: AI-powered demand forecasting (SIMULATED)
- * Phase 3: Premium editorial redesign - PREDICTION → DECISION → ACTION flow
- * 
- * Validates Requirements: 8.1-8.6, 16.6
+ * Demand Intelligence Page - Connected to real backend ML API
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TrendingUp, AlertTriangle, ArrowLeft } from 'lucide-react';
-import { useMockData } from '../../contexts/MockDataContext';
+import { mlApi } from '../../lib/api';
 
 export function DemandIntelligence() {
   const navigate = useNavigate();
-  const { forecasts } = useMockData();
+  const [forecasts, setForecasts] = useState<any[]>([]);
+  const [historicalActuals, setHistoricalActuals] = useState<any>({});
+  const [modelInfo, setModelInfo] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Get unique service categories
-  const categories = ['All', ...Array.from(new Set(forecasts.map(f => f.serviceCategory)))];
+  useEffect(() => {
+    mlApi.getDemandForecast(7)
+      .then((data) => {
+        setForecasts(data.forecasts || []);
+        setHistoricalActuals(data.historical_actuals || {});
+        setModelInfo(data.model_info);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
 
-  // Filter forecasts
+  const categories = ['All', ...Array.from(new Set(forecasts.map((f: any) => f.service_category)))];
+
   const filteredForecasts = selectedCategory === 'All'
     ? forecasts
-    : forecasts.filter(f => f.serviceCategory === selectedCategory);
+    : forecasts.filter((f: any) => f.service_category === selectedCategory);
 
   // Group by date
-  const forecastsByDate = filteredForecasts.reduce((acc, forecast) => {
-    const dateKey = forecast.date.toLocaleDateString();
+  const forecastsByDate = filteredForecasts.reduce((acc: any, forecast: any) => {
+    const dateKey = forecast.date;
     if (!acc[dateKey]) acc[dateKey] = [];
     acc[dateKey].push(forecast);
     return acc;
-  }, {} as Record<string, typeof forecasts>);
+  }, {} as Record<string, any[]>);
 
-  // Get shortage alerts
-  const shortages = forecasts.filter(f => f.shortage);
+  // Shortage alerts: predicted_demand > 20 and high confidence
+  const shortages = forecasts.filter((f: any) => f.predicted_demand > 20 && f.confidence_score > 0.8)
+    .slice(0, 5);
+
+  if (loading) {
+    return (
+      <main className="mx-auto min-h-screen max-w-[1400px] px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14">
+        <div className="flex items-center justify-center py-32">
+          <div className="text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-accent-primary border-t-transparent" />
+            <p className="mt-4 text-sm text-text-secondary">Loading demand forecasts from ML model...</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto min-h-screen max-w-[1400px] px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14">
@@ -123,15 +145,12 @@ export function DemandIntelligence() {
                 CAPACITY WARNINGS
               </p>
               <h2 className="mt-2 text-2xl font-extrabold tracking-[-0.055em] text-text-navy sm:text-3xl md:text-4xl">
-                Predicted Shortages
+                High Demand Days
               </h2>
             </div>
             
             <div className="space-y-3">
-              {shortages.slice(0, 5).map((forecast, index) => {
-                const shortageAmount = forecast.predictedDemand - forecast.availableCapacity;
-                
-                return (
+              {shortages.slice(0, 5).map((forecast: any, index: number) => (
                   <article 
                     key={index} 
                     className="overflow-hidden rounded-[20px] border-2 border-accent-primary/20 bg-accent-light/30 p-4 sm:rounded-[24px] sm:p-5 md:p-6"
@@ -141,61 +160,48 @@ export function DemandIntelligence() {
                         <div className="flex items-center gap-2">
                           <AlertTriangle size={18} className="flex-shrink-0 text-accent-primary sm:h-5 sm:w-5" strokeWidth={2.5} />
                           <p className="font-mono text-[9px] font-bold tracking-[0.1em] text-accent-primary sm:text-[10px]">
-                            WORKFORCE ALERT
+                            HIGH DEMAND PREDICTED
                           </p>
                         </div>
                         <h3 className="mt-2 text-lg font-extrabold tracking-[-0.03em] text-text-navy sm:mt-3 sm:text-xl md:text-2xl">
-                          {forecast.serviceCategory}
+                          {forecast.service_category}
                         </h3>
                         <p className="mt-1.5 text-xs text-text-secondary sm:mt-2 sm:text-sm">
-                          {forecast.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                          {forecast.date} · {forecast.day_of_week}
+                          {forecast.is_festival && ' · 🎉 Festival Day'}
                         </p>
                         
                         <div className="mt-3 grid grid-cols-3 gap-3 sm:mt-4 sm:gap-4">
                           <div>
                             <p className="font-mono text-[8px] font-semibold tracking-[0.12em] text-text-tertiary sm:text-[9px]">
-                              EXPECTED
+                              PREDICTED
                             </p>
                             <p className="mt-1 text-lg font-extrabold tracking-[-0.04em] text-text-navy sm:text-xl">
-                              {forecast.predictedDemand}
+                              {forecast.predicted_demand}
                             </p>
                             <p className="text-[10px] text-text-tertiary sm:text-xs">jobs</p>
                           </div>
                           <div className="border-l border-text-navy/10 pl-3 sm:pl-4">
                             <p className="font-mono text-[8px] font-semibold tracking-[0.12em] text-text-tertiary sm:text-[9px]">
-                              CAPACITY
+                              CONFIDENCE
                             </p>
                             <p className="mt-1 text-lg font-extrabold tracking-[-0.04em] text-text-navy sm:text-xl">
-                              {forecast.availableCapacity}
+                              {Math.round(forecast.confidence_score * 100)}%
                             </p>
-                            <p className="text-[10px] text-text-tertiary sm:text-xs">workers</p>
                           </div>
                           <div className="border-l border-text-navy/10 pl-3 sm:pl-4">
                             <p className="font-mono text-[8px] font-semibold tracking-[0.12em] text-accent-primary sm:text-[9px]">
-                              SHORTAGE
+                              DAY FACTOR
                             </p>
                             <p className="mt-1 text-lg font-extrabold tracking-[-0.04em] text-accent-primary sm:text-xl">
-                              -{shortageAmount}
+                              {forecast.factors?.day_factor}x
                             </p>
-                            <p className="text-[10px] text-accent-primary sm:text-xs">jobs</p>
                           </div>
-                        </div>
-
-                        {/* Action Recommendation */}
-                        <div className="mt-4 rounded-xl border border-accent-primary/20 bg-white/60 p-3 sm:mt-5">
-                          <p className="font-mono text-[8px] font-semibold tracking-[0.1em] text-accent-primary sm:text-[9px]">
-                            RECOMMENDED ACTION
-                          </p>
-                          <p className="mt-1 text-xs font-medium leading-relaxed text-text-navy sm:text-sm">
-                            Prioritize {forecast.serviceCategory.toLowerCase()} workers in high-demand areas. 
-                            Consider skill training for adjacent workers.
-                          </p>
                         </div>
                       </div>
                     </div>
                   </article>
-                );
-              })}
+                ))}
             </div>
           </section>
         )}
@@ -213,68 +219,40 @@ export function DemandIntelligence() {
 
           <div className="overflow-hidden rounded-[24px] border border-status-subtle bg-white p-4 sm:rounded-[32px] sm:p-6 md:p-8">
             <div className="space-y-6 sm:space-y-8">
-              {Object.entries(forecastsByDate).map(([date, dayForecasts]) => (
+              {Object.entries(forecastsByDate).map(([date, dayForecasts]: [string, any]) => (
                 <div key={date} className="space-y-3 sm:space-y-4">
                   <h3 className="text-base font-extrabold tracking-[-0.03em] text-text-navy sm:text-lg">
-                    {new Date(dayForecasts[0].date).toLocaleDateString('en-US', { 
+                    {new Date(date).toLocaleDateString('en-US', { 
                       weekday: 'long', 
                       month: 'short', 
                       day: 'numeric' 
-                    })}
+                    })} {dayForecasts[0]?.is_weekend && '🏠'}
                   </h3>
                   
                   <div className="space-y-3">
-                    {dayForecasts.map((forecast, index) => {
-                      const utilizationPercent = (forecast.predictedDemand / forecast.availableCapacity) * 100;
-                      const isOverCapacity = utilizationPercent > 100;
+                    {dayForecasts.map((forecast: any, index: number) => {
+                      const maxDemand = 40;
+                      const pct = Math.min((forecast.predicted_demand / maxDemand) * 100, 100);
                       
                       return (
                         <div key={index} className="space-y-2">
                           <div className="flex flex-col gap-1.5 text-xs sm:flex-row sm:items-center sm:justify-between sm:text-sm">
-                            <span className="font-semibold text-text-navy">{forecast.serviceCategory}</span>
+                            <span className="font-semibold text-text-navy">{forecast.service_category}</span>
                             <div className="flex flex-wrap items-center gap-2 font-mono text-[10px] text-text-tertiary sm:gap-3 sm:text-xs">
-                              <span>{forecast.predictedDemand} demand</span>
-                              <span>/</span>
-                              <span>{forecast.availableCapacity} capacity</span>
-                              <span className={`font-bold ${forecast.shortage ? 'text-accent-primary' : 'text-text-secondary'}`}>
-                                {Math.round(utilizationPercent)}%
+                              <span>{forecast.predicted_demand} predicted jobs</span>
+                              <span className="font-bold text-text-secondary">
+                                {Math.round(forecast.confidence_score * 100)}% confidence
                               </span>
                             </div>
                           </div>
                           
-                          {/* Capacity Bar */}
                           <div className="relative h-9 overflow-hidden rounded-lg bg-[#f3f3f3] sm:h-10 sm:rounded-xl">
-                            <div
-                              className={`h-full transition-all ${
-                                forecast.shortage ? 'bg-accent-primary' : 'bg-text-navy'
-                              }`}
-                              style={{ width: `${Math.min(utilizationPercent, 100)}%` }}
-                            />
-                            {isOverCapacity && (
-                              <div className="absolute inset-0 flex items-center justify-end px-3 sm:pr-4">
-                                <span className="font-mono text-[9px] font-bold text-white sm:text-xs">
-                                  {Math.round(utilizationPercent - 100)}% OVER
-                                </span>
-                              </div>
-                            )}
-                            {!isOverCapacity && (
-                              <div className="absolute inset-0 flex items-center px-3 sm:px-4">
-                                <span className="font-mono text-[9px] font-semibold text-white sm:text-xs">
-                                  DEMAND vs CAPACITY
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
-                            <span className="font-mono text-[8px] tracking-[0.08em] text-text-tertiary sm:text-[9px]">
-                              Confidence: {Math.round(forecast.confidenceLevel * 100)}%
-                            </span>
-                            {forecast.shortage && (
-                              <span className="font-mono text-[8px] font-bold tracking-[0.1em] text-accent-primary sm:text-[9px]">
-                                SHORTAGE PREDICTED
+                            <div className="h-full bg-text-navy transition-all" style={{ width: `${pct}%` }} />
+                            <div className="absolute inset-0 flex items-center px-3 sm:px-4">
+                              <span className="font-mono text-[9px] font-semibold text-white sm:text-xs">
+                                {forecast.predicted_demand} JOBS PREDICTED
                               </span>
-                            )}
+                            </div>
                           </div>
                         </div>
                       );
@@ -286,21 +264,21 @@ export function DemandIntelligence() {
           </div>
         </section>
 
-        {/* Methodology Disclaimer */}
-        <section className="rounded-[20px] border-2 border-accent-primary/20 bg-accent-light/20 p-5 sm:rounded-[24px] sm:p-6 md:p-8">
-          <p className="font-mono text-[9px] font-semibold tracking-[0.12em] text-accent-primary sm:text-[10px]">
-            ABOUT THIS FEATURE
-          </p>
-          <h3 className="mt-2 text-lg font-extrabold tracking-[-0.03em] text-text-navy sm:mt-3 sm:text-xl">
-            Forecasting Methodology
-          </h3>
-          <p className="mt-2 text-xs leading-relaxed text-text-secondary sm:mt-3 sm:text-sm">
-            <strong className="font-semibold text-text-navy">DEMO:</strong> Forecasts generated using 
-            historical demand patterns and seasonal trends (simulated). In production, this would use 
-            machine learning models trained on real operational data, weather patterns, local events, 
-            and service history to predict demand with greater accuracy.
-          </p>
-        </section>
+        {/* Model Info */}
+        {modelInfo && (
+          <section className="rounded-[20px] border-2 border-accent-primary/20 bg-accent-light/20 p-5 sm:rounded-[24px] sm:p-6 md:p-8">
+            <p className="font-mono text-[9px] font-semibold tracking-[0.12em] text-accent-primary sm:text-[10px]">
+              MODEL INFORMATION
+            </p>
+            <h3 className="mt-2 text-lg font-extrabold tracking-[-0.03em] text-text-navy sm:mt-3 sm:text-xl">
+              {modelInfo.algorithm}
+            </h3>
+            <p className="mt-2 text-xs leading-relaxed text-text-secondary sm:mt-3 sm:text-sm">
+              Features: {modelInfo.features?.join(', ')} · 
+              Training data: {modelInfo.training_data_points} real jobs
+            </p>
+          </section>
+        )}
       </div>
     </main>
   );

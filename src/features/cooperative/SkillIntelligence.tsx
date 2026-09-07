@@ -1,30 +1,43 @@
 /**
- * Skill Intelligence Page
- * 
- * PRIORITY SCREEN #6: AI-powered skill gap analysis (SIMULATED)
- * Phase 3: Premium editorial redesign - FORECAST → SKILL GAP → TRAINING RESPONSE flow
- * 
- * Validates Requirements: 9.1-9.6, 16.7
+ * Skill Intelligence Page - Connected to real backend ML API
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GraduationCap, ArrowLeft, AlertCircle } from 'lucide-react';
-import { useMockData } from '../../contexts/MockDataContext';
+import { mlApi } from '../../lib/api';
 
 export function SkillIntelligence() {
   const navigate = useNavigate();
-  const { skillGaps } = useMockData();
+  const [skillGaps, setSkillGaps] = useState<any[]>([]);
+  const [topRecommendations, setTopRecommendations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Sort by severity
-  const sortedGaps = [...skillGaps].sort((a, b) => {
-    const severityOrder = { CRITICAL: 0, MODERATE: 1, LOW: 2 };
-    return severityOrder[a.severity] - severityOrder[b.severity];
-  });
+  useEffect(() => {
+    mlApi.getSkillGaps()
+      .then((data) => {
+        setSkillGaps(data.skill_gaps || []);
+        setTopRecommendations(data.top_training_recommendations || []);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
-  const criticalCount = skillGaps.filter(g => g.severity === 'CRITICAL').length;
-  const moderateCount = skillGaps.filter(g => g.severity === 'MODERATE').length;
-  const totalTrainingWeeks = skillGaps.reduce((sum, g) => sum + g.estimatedTrainingDuration, 0);
+  const criticalCount = skillGaps.filter((g: any) => g.severity === 'critical').length;
+  const highCount = skillGaps.filter((g: any) => g.severity === 'high').length;
+
+  if (loading) {
+    return (
+      <main className="mx-auto min-h-screen max-w-[1400px] px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14">
+        <div className="flex items-center justify-center py-32">
+          <div className="text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-accent-primary border-t-transparent" />
+            <p className="mt-4 text-sm text-text-secondary">Analyzing skill gaps from real data...</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto min-h-screen max-w-[1400px] px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14">
@@ -101,22 +114,45 @@ export function SkillIntelligence() {
 
           <div className="overflow-hidden rounded-[20px] border border-status-subtle bg-white p-4 sm:rounded-[24px] sm:p-5 md:p-6">
             <p className="font-mono text-[9px] font-semibold tracking-[0.12em] text-text-tertiary sm:text-[10px]">
-              MODERATE
+              HIGH
             </p>
             <p className="mt-2 text-[clamp(2rem,7vw,4rem)] font-extrabold leading-none tracking-[-0.05em] text-text-navy">
-              {moderateCount}
+              {highCount}
             </p>
           </div>
 
           <div className="col-span-2 overflow-hidden rounded-[20px] border border-status-subtle bg-white p-4 sm:rounded-[24px] sm:p-5 md:col-span-1 md:p-6">
             <p className="font-mono text-[9px] font-semibold tracking-[0.12em] text-text-tertiary sm:text-[10px]">
-              TRAINING WEEKS
+              CATEGORIES ANALYZED
             </p>
             <p className="mt-2 text-[clamp(2rem,7vw,4rem)] font-extrabold leading-none tracking-[-0.05em] text-text-navy">
-              {totalTrainingWeeks}
+              {skillGaps.length}
             </p>
           </div>
         </section>
+
+        {/* Top Training Recommendations */}
+        {topRecommendations.length > 0 && (
+          <section className="overflow-hidden rounded-[24px] border border-accent-primary/20 bg-accent-light/20 p-4 sm:rounded-[32px] sm:p-6">
+            <p className="font-mono text-[9px] font-semibold tracking-[0.12em] text-accent-primary sm:text-[10px]">
+              TOP ROI RECOMMENDATIONS
+            </p>
+            <div className="mt-3 space-y-3">
+              {topRecommendations.map((rec: any, i: number) => (
+                <div key={i} className="flex items-start gap-3 rounded-xl bg-white/60 p-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-primary text-xs font-bold text-white">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="font-semibold text-text-navy">{rec.category}</p>
+                    <p className="text-xs text-text-secondary">{rec.action}</p>
+                    <p className="mt-0.5 font-mono text-[9px] text-accent-primary">{rec.expected_improvement}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Skill Gaps - Mobile optimized */}
         <section className="space-y-4 sm:space-y-6">
@@ -130,113 +166,78 @@ export function SkillIntelligence() {
           </div>
 
           <div className="space-y-3 sm:space-y-5">
-            {sortedGaps.map((gap, index) => (
+            {skillGaps.map((gap: any, index: number) => (
               <article 
                 key={index} 
                 className={`overflow-hidden rounded-[20px] border bg-white p-4 sm:rounded-[24px] sm:p-5 md:rounded-[28px] md:p-6 lg:p-8 ${
-                  gap.severity === 'CRITICAL' ? 'border-l-4 border-accent-primary' : 'border-status-subtle'
+                  gap.severity === 'critical' ? 'border-l-4 border-accent-primary' : 'border-status-subtle'
                 }`}
               >
                 <div className="space-y-4 sm:space-y-5">
-                  {/* Header - Mobile friendly stacking */}
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                         <span className={`inline-flex rounded-full px-2.5 py-1 font-mono text-[8px] font-bold tracking-[0.1em] sm:px-3 sm:text-[9px] ${
-                          gap.severity === 'CRITICAL' ? 'bg-accent-primary text-white' :
-                          gap.severity === 'MODERATE' ? 'bg-text-navy text-white' :
+                          gap.severity === 'critical' ? 'bg-accent-primary text-white' :
+                          gap.severity === 'high' ? 'bg-text-navy text-white' :
                           'bg-status-subtle text-text-secondary'
                         }`}>
-                          {gap.severity}
+                          {gap.severity.toUpperCase()} · #{gap.priority_rank}
                         </span>
                       </div>
                       <h3 className="mt-2.5 text-xl font-extrabold tracking-[-0.04em] text-text-navy sm:mt-3 sm:text-2xl md:text-3xl">
-                        {gap.skillCategory}
+                        {gap.service_category}
                       </h3>
                     </div>
                     <div className="flex-shrink-0 text-left sm:text-right">
-                      <p className="font-mono text-[9px] tracking-[0.12em] text-text-tertiary sm:text-[10px]">
-                        GAP
-                      </p>
-                      <p className="mt-0.5 text-3xl font-extrabold tracking-[-0.05em] text-accent-primary sm:mt-1 sm:text-4xl md:text-5xl">
-                        {gap.gap}%
+                      <p className="font-mono text-[9px] tracking-[0.12em] text-text-tertiary sm:text-[10px]">GAP SCORE</p>
+                      <p className="mt-0.5 text-3xl font-extrabold tracking-[-0.05em] text-accent-primary sm:mt-1 sm:text-4xl">
+                        {Math.round(gap.gap_score * 100)}
                       </p>
                     </div>
                   </div>
 
-                  {/* Coverage Visualization - Mobile optimized */}
-                  <div className="space-y-1.5 sm:space-y-2">
-                    <div className="flex justify-between text-xs text-text-tertiary sm:text-sm">
-                      <span>Current: {gap.currentCoverage}%</span>
-                      <span>Required: {gap.requiredCoverage}%</span>
+                  {/* Real metrics from DB */}
+                  <div className="grid grid-cols-3 gap-3 rounded-xl bg-gray-50 p-3">
+                    <div>
+                      <p className="font-mono text-[8px] text-text-tertiary">UNFILLED RATE</p>
+                      <p className="mt-1 font-bold text-text-navy">{gap.metrics?.unfilled_rate}</p>
                     </div>
-                    <div className="relative h-3 overflow-hidden rounded-full bg-status-subtle sm:h-4">
-                      <div 
-                        className="h-full rounded-full bg-text-navy transition-all"
-                        style={{ width: `${gap.currentCoverage}%` }}
-                      />
+                    <div>
+                      <p className="font-mono text-[8px] text-text-tertiary">AVG RATING</p>
+                      <p className="mt-1 font-bold text-text-navy">{gap.metrics?.avg_quality_rating ?? 'N/A'}</p>
                     </div>
-                  </div>
-
-                  {/* Affected Services - Mobile friendly wrapping */}
-                  <div>
-                    <p className="mb-1.5 font-mono text-[9px] font-semibold tracking-[0.12em] text-text-tertiary sm:mb-2 sm:text-[10px]">
-                      AFFECTED SERVICES
-                    </p>
-                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                      {gap.affectedServices.map((service, i) => (
-                        <span 
-                          key={i} 
-                          className="rounded-full border border-status-subtle bg-background-primary px-2.5 py-1 text-xs text-text-secondary sm:px-3 sm:text-sm"
-                        >
-                          {service}
-                        </span>
-                      ))}
+                    <div>
+                      <p className="font-mono text-[8px] text-text-tertiary">WORKERS</p>
+                      <p className="mt-1 font-bold text-text-navy">{gap.metrics?.available_workers}</p>
                     </div>
                   </div>
 
-                  {/* Training Response - Mobile friendly spacing */}
-                  <div className="rounded-xl border border-accent-primary/20 bg-accent-light/20 p-3.5 sm:p-4">
-                    <div className="flex items-start gap-2">
-                      <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-accent-primary sm:h-[18px] sm:w-[18px]" strokeWidth={2} />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-mono text-[9px] font-semibold tracking-[0.12em] text-accent-primary sm:text-[10px]">
-                          RECOMMENDED TRAINING RESPONSE
-                        </p>
-                        <ul className="mt-2.5 space-y-1.5 sm:mt-3 sm:space-y-2">
-                          {gap.recommendedTraining.map((training, i) => (
-                            <li key={i} className="flex items-start gap-1.5 text-xs text-text-secondary sm:gap-2 sm:text-sm">
-                              <span className="text-accent-primary">•</span>
-                              <span className="font-medium text-text-navy">{training}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        <p className="mt-2.5 text-xs text-text-tertiary sm:mt-3 sm:text-sm">
-                          Estimated training duration: <strong className="font-semibold text-text-navy">{gap.estimatedTrainingDuration} weeks</strong>
-                        </p>
+                  {/* Recommendations */}
+                  {gap.recommendations?.length > 0 && (
+                    <div className="rounded-xl border border-accent-primary/20 bg-accent-light/20 p-3.5 sm:p-4">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-accent-primary" strokeWidth={2} />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-mono text-[9px] font-semibold tracking-[0.12em] text-accent-primary sm:text-[10px]">
+                            RECOMMENDED ACTIONS
+                          </p>
+                          <ul className="mt-2.5 space-y-1.5 sm:mt-3 sm:space-y-2">
+                            {gap.recommendations.map((rec: string, i: number) => (
+                              <li key={i} className="flex items-start gap-1.5 text-xs text-text-secondary sm:gap-2 sm:text-sm">
+                                <span className="text-accent-primary">•</span>
+                                <span className="font-medium text-text-navy">{rec}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </article>
             ))}
           </div>
-        </section>
-
-        {/* Methodology Disclaimer - Mobile optimized */}
-        <section className="rounded-[20px] border-2 border-accent-primary/20 bg-accent-light/20 p-4 sm:rounded-[24px] sm:p-6 md:p-8">
-          <p className="font-mono text-[9px] font-semibold tracking-[0.12em] text-accent-primary sm:text-[10px]">
-            ABOUT THIS FEATURE
-          </p>
-          <h3 className="mt-2.5 text-lg font-extrabold tracking-[-0.03em] text-text-navy sm:mt-3 sm:text-xl">
-            Analysis Methodology
-          </h3>
-          <p className="mt-2.5 text-xs leading-relaxed text-text-secondary sm:mt-3 sm:text-sm">
-            <strong className="font-semibold text-text-navy">DEMO:</strong> Skill gap analysis based on 
-            demand trends and workforce composition (simulated). In production, this would use machine 
-            learning models analyzing historical job data, service demand patterns, worker performance 
-            metrics, and market trends to identify precise skill requirements and training priorities.
-          </p>
         </section>
       </div>
     </main>
