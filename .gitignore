@@ -31,7 +31,6 @@ coverage/
 .idea/
 *.swp
 *.swo
-
 # Kiro - ignore everything except specs
 .kiro/*
 !.kiro/specs/
