@@ -7,7 +7,7 @@
  */
 
 // CRITICAL: Backend runs on port 3000, not 4000
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '');
 
 // ─── Auth Token Management ───────────────────────────────────────────────────
 
