@@ -108,8 +108,6 @@ export const workersApi = {
 
   getProfileMe: () => request<{ worker: any }>('/api/workers/profile/me'),
 
-  getProfileMe: () => request<{ worker: any }>('/api/workers/profile/me'),
-
   create: (payload: {
     skills: Array<{ category: string; subcategory?: string; skill_level?: string }>;
     location: { lat: number; lng: number };
@@ -149,6 +147,7 @@ export const workersApi = {
 export const jobsApi = {
   create: (payload: {
     service_category_name: string;
+    service_subcategory_name?: string;
     description: string;
     address: string;
     location: { lat: number; lng: number };

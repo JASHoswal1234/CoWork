@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Check, ImagePlus, MapPin, ShieldCheck, Sparkles, AlertCircle } from 'lucide-react';
+import { ArrowRight, Check, ShieldCheck, AlertCircle, RefreshCw } from 'lucide-react';
 import { useMockData } from '../../contexts/MockDataContext';
 import { dispatchWorker, type DispatchResult } from '../../engines/dispatchEngine';
 import { mlApi, workersApi, jobsApi } from '../../lib/api';
 import type { ServiceRequest } from '../../types/job';
-import type { ServiceCategory } from '../../types/service';
+import type { ServiceCategory, ServiceSubcategory } from '../../types/service';
+import { ServiceSelection } from './ServiceSelection';
+import { ServiceDetails } from './ServiceDetails';
+import { BookingForm } from './BookingForm';
 
-type CustomerStage = 'browse' | 'request' | 'dispatch' | 'select' | 'matched';
+type CustomerStage = 'browse' | 'services' | 'details' | 'request' | 'dispatch' | 'select' | 'matched';
 
 interface CandidateDisplay {
   id: string;
@@ -38,8 +41,6 @@ const surfaceByService: Record<string, string> = {
   Cleaning: 'bg-[#fce4ec]',
   'Appliance Repair': 'bg-[#fff8e1]',
 };
-
-const formPanelSurface = 'bg-[#eaf1f8]';
 
 const diagnosisByService: Record<string, string> = {
   Plumbing: 'This looks like a likely pipe or fixture leak. A verified plumbing worker can inspect the connection and carry out the repair.',
@@ -109,202 +110,12 @@ function ServiceCard({ service, index, onSelect }: { service: ServiceCategory; i
   );
 }
 
-function CustomerRequestForm({
-  service,
-  description,
-  setDescription,
-  urgency,
-  setUrgency,
-  uploadedImage,
-  isDiagnosing,
-  aiDiagnosisBadge,
-  onUpload,
-  onBack,
-  onFind,
-}: {
-  service: ServiceCategory;
-  description: string;
-  setDescription: (value: string) => void;
-  urgency: 'normal' | 'urgent';
-  setUrgency: (value: 'normal' | 'urgent') => void;
-  uploadedImage: string | null;
-  isDiagnosing: boolean;
-  aiDiagnosisBadge: string | null;
-  onUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onBack: () => void;
-  onFind: () => void;
-}) {
-  return (
-    <main className="mx-auto min-h-screen max-w-6xl px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14">
-      <button
-        onClick={onBack}
-        className="mb-6 min-h-[44px] font-mono text-xs font-semibold tracking-[0.1em] text-text-secondary hover:text-accent-primary sm:mb-8 md:mb-10"
-      >
-        ← ALL SERVICES
-      </button>
-      <div className="grid items-start gap-6 sm:gap-7 md:gap-8 lg:grid-cols-[0.82fr_1.18fr]">
-        <aside
-          className={`relative min-h-[360px] overflow-hidden rounded-[28px] ${formPanelSurface} p-6 sm:min-h-[420px] sm:rounded-[32px] sm:p-7 md:min-h-[680px] md:rounded-[36px] md:p-10 lg:sticky lg:top-28`}
-        >
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <div className="absolute bottom-[-15%] right-[-10%] h-[65%] w-[65%] rounded-full bg-white/30 sm:bg-white/35 md:bottom-[-10%] md:right-[-8%] md:h-[60%] md:w-[60%]" />
-            <img
-              src="/illustrations/form-illustration.png"
-              alt=""
-              className="absolute bottom-[-8%] right-[-15%] h-[108%] w-auto max-w-none opacity-75 sm:bottom-[-7%] sm:opacity-80 md:bottom-[-5%] md:right-[-12%] md:h-[115%] md:opacity-85"
-              style={{ objectFit: 'contain', objectPosition: 'bottom right' }}
-            />
-          </div>
-
-          <div className="relative z-10 flex h-full flex-col">
-            <div className="max-w-[75%] sm:max-w-[72%] md:max-w-[70%]">
-              <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-text-secondary sm:text-[10px] sm:tracking-[0.16em]">
-                ON-DEMAND SERVICE
-              </p>
-              <h1 className="mt-3 text-[clamp(2rem,7vw,2.75rem)] font-extrabold leading-[0.92] tracking-[-0.06em] text-text-navy sm:mt-4">
-                {service.name}, when you need it.
-              </h1>
-            </div>
-
-            <div className="mt-auto pt-6 sm:pt-7 md:pt-8">
-              <p className="font-mono text-[9px] font-semibold tracking-[0.12em] text-accent-primary sm:text-[10px]">
-                PUNE · COOPERATIVE NETWORK
-              </p>
-            </div>
-          </div>
-        </aside>
-
-        <section className="rounded-[24px] border border-status-subtle bg-white p-5 sm:rounded-[28px] sm:p-6 md:rounded-[32px] md:p-10">
-          <div className="mb-7 flex items-center gap-2.5 font-mono text-[9px] font-semibold tracking-[0.12em] text-text-secondary sm:mb-8 sm:gap-3 sm:text-[10px] md:mb-10">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-primary text-white sm:h-7 sm:w-7">
-              1
-            </span>{' '}
-            DESCRIBE
-            <span className="h-px w-6 bg-status-subtle sm:w-8" />
-            <span>2 MATCH</span>
-          </div>
-
-          <h2 className="text-3xl font-extrabold tracking-[-0.045em] text-text-navy md:text-4xl">
-            Tell us what needs attention.
-          </h2>
-          <p className="mt-3 max-w-lg text-text-secondary">
-            We’ll use your request to find an available, verified cooperative worker nearby.
-          </p>
-
-          <div className="mt-8 rounded-2xl border border-accent-primary/15 bg-accent-light/50 p-4">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 rounded-xl bg-white p-2 text-accent-primary">
-                <Sparkles size={16} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold text-text-navy">AI Photo Problem Diagnosis</p>
-                  <span className="rounded-md bg-accent-primary/10 px-2 py-0.5 font-mono text-[9px] font-bold tracking-[0.08em] text-accent-primary">
-                    GEMINI 2.0 FLASH
-                  </span>
-                </div>
-                <p className="mt-1 text-xs leading-5 text-text-secondary">
-                  Upload a photo and Gemini Vision will diagnose the problem and draft your service request.
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <label
-                    htmlFor="problem-photo"
-                    className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-accent-primary bg-white px-3 py-2 text-xs font-semibold text-accent-primary transition hover:bg-accent-primary hover:text-white"
-                  >
-                    <ImagePlus size={15} /> {uploadedImage ? 'CHANGE PHOTO' : 'UPLOAD PHOTO'}
-                  </label>
-                  <input
-                    id="problem-photo"
-                    className="sr-only"
-                    type="file"
-                    accept="image/*"
-                    onChange={onUpload}
-                  />
-                  {isDiagnosing && (
-                    <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-[0.08em] text-accent-primary">
-                      <span className="h-2 w-2 animate-ping rounded-full bg-accent-primary" />
-                      ANALYZING WITH GEMINI VISION…
-                    </span>
-                  )}
-                  {uploadedImage && !isDiagnosing && (
-                    <span className="flex items-center gap-1 font-mono text-[10px] tracking-[0.08em] text-green-700">
-                      <Check size={13} /> AI DIAGNOSIS COMPLETE
-                    </span>
-                  )}
-                </div>
-                {aiDiagnosisBadge && (
-                  <div className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[11px] font-medium text-text-navy shadow-sm">
-                    <Sparkles size={12} className="text-accent-primary" />
-                    <span>{aiDiagnosisBadge}</span>
-                  </div>
-                )}
-                {uploadedImage && (
-                  <img
-                    src={uploadedImage}
-                    alt="Problem photo preview"
-                    className="mt-4 h-24 w-24 rounded-xl border border-white object-cover shadow-sm"
-                  />
-                )}
-              </div>
-            </div>
-          </div>
-
-          <label htmlFor="problem" className="mt-7 block font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">
-            DESCRIBE THE PROBLEM
-          </label>
-          <textarea
-            id="problem"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="Describe the issue or upload a photo for automatic diagnosis..."
-            rows={5}
-            className="mt-3 w-full resize-none rounded-2xl border border-status-subtle bg-background-primary px-4 py-4 text-base outline-none transition focus:border-accent-primary focus:bg-white"
-          />
-
-          <div className="mt-7 grid gap-6 sm:grid-cols-2">
-            <div>
-              <p className="font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">LOCATION</p>
-              <div className="mt-3 flex items-center gap-3 rounded-2xl border border-status-subtle px-4 py-3 text-sm font-medium text-text-navy">
-                <MapPin size={17} className="text-accent-primary" /> Kothrud, Pune
-                <span className="ml-auto font-mono text-[9px] font-semibold text-accent-primary">ACTIVE NETWORK</span>
-              </div>
-            </div>
-            <div>
-              <p className="font-mono text-[11px] font-semibold tracking-[0.12em] text-text-secondary">URGENCY</p>
-              <div className="mt-3 flex rounded-2xl bg-background-primary p-1">
-                {(['normal', 'urgent'] as const).map((value) => (
-                  <button
-                    key={value}
-                    onClick={() => setUrgency(value)}
-                    className={`flex-1 rounded-xl py-2 text-xs font-semibold uppercase tracking-[0.08em] transition ${
-                      urgency === value ? 'bg-white text-accent-primary shadow-sm' : 'text-text-secondary'
-                    }`}
-                  >
-                    {value}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={onFind}
-            disabled={description.trim().length < 5 || isDiagnosing}
-            className="mt-10 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-accent-primary px-6 py-4 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-status-neutral md:w-auto"
-          >
-            FIND A WORKER <ArrowRight size={18} />
-          </button>
-        </section>
-      </div>
-    </main>
-  );
-}
-
 export function CustomerHome() {
   const { services, workers } = useMockData();
   const navigate = useNavigate();
   const [stage, setStage] = useState<CustomerStage>('browse');
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [urgency, setUrgency] = useState<'normal' | 'urgent'>('normal');
   const [dispatchResult, setDispatchResult] = useState<DispatchResult | null>(null);
@@ -314,13 +125,29 @@ export function CustomerHome() {
   const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [aiDiagnosisBadge, setAiDiagnosisBadge] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<CandidateDisplay[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [createdJobId, setCreatedJobId] = useState<string | null>(null);
   const [isBooking, setIsBooking] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
   const selectedService = useMemo(
     () => services.find((service) => service.id === selectedServiceId),
     [services, selectedServiceId]
   );
+
+  const selectedSubcategory: ServiceSubcategory | undefined = useMemo(
+    () => selectedService?.subcategories.find((sub) => sub.id === selectedSubcategoryId),
+    [selectedService, selectedSubcategoryId]
+  );
+
+  /** Starting estimate = selected service's minimum price (fallback to category min). */
+  const startingEstimate = useMemo(() => {
+    if (selectedSubcategory) return selectedSubcategory.priceRange.min;
+    if (selectedService && selectedService.subcategories.length > 0) {
+      return Math.min(...selectedService.subcategories.map((s) => s.priceRange.min));
+    }
+    return 0;
+  }, [selectedSubcategory, selectedService]);
 
   useEffect(() => {
     if (stage !== 'dispatch') return;
@@ -328,7 +155,15 @@ export function CustomerHome() {
       setVisibleStep((prev) => {
         if (prev >= 4) {
           clearInterval(timer);
-          setStage('select');
+          // Only advance to selection once the search actually returned workers.
+          // Otherwise land on the "no workers" state instead of a fake success.
+          setCandidates((current) => {
+            setStage(current.length > 0 ? 'select' : 'request');
+            if (current.length === 0) {
+              setSearchError((prevErr) => prevErr ?? 'No verified workers are available nearby right now.');
+            }
+            return current;
+          });
           return 4;
         }
         return prev + 1;
@@ -337,12 +172,31 @@ export function CustomerHome() {
     return () => clearInterval(timer);
   }, [stage]);
 
-  const selectService = (serviceId: string) => {
+  // Step 1 of the flow: pick a category -> open its service list.
+  const selectCategory = (serviceId: string) => {
     setSelectedServiceId(serviceId);
+    setSelectedSubcategoryId(null);
     setDescription('');
     setUploadedImage(null);
     setIsDiagnosing(false);
     setAiDiagnosisBadge(null);
+    setCandidates([]);
+    setSearchError(null);
+    setBookingError(null);
+    setCreatedJobId(null);
+    setStage('services');
+  };
+
+  // Step 2: pick a specific service/subcategory -> open its detail screen.
+  const selectSubcategory = (subcategory: ServiceSubcategory) => {
+    setSelectedSubcategoryId(subcategory.id);
+    setStage('details');
+  };
+
+  // Step 3: from details, begin the request/booking form.
+  const startBooking = () => {
+    setSearchError(null);
+    setBookingError(null);
     setStage('request');
   };
 
@@ -386,18 +240,52 @@ export function CustomerHome() {
   const handleFindWorker = async () => {
     if (!selectedService || description.trim().length < 5) return;
 
+    // Reset any previous results/errors and start the search animation.
+    setCandidates([]);
+    setSearchError(null);
+    setBookingError(null);
+    setSelectedWorkerIndex(0);
     setVisibleStep(1);
     setStage('dispatch');
 
     // Customer Location: Kothrud, Pune
     const customerLocation = { lat: 18.5074, lng: 73.8077 };
+    // Prefer the exact selected service; fall back to the category name.
+    const searchTerm = selectedService.name;
+    const subcategoryName = selectedSubcategory?.name || selectedService.subcategories[0]?.name || '';
+
+    const buildLocalFallback = (): CandidateDisplay[] => {
+      try {
+        const request: ServiceRequest = {
+          serviceCategory: selectedService.name,
+          serviceSubcategory: subcategoryName,
+          description: description.trim(),
+          location: { address: 'Kothrud, Pune', coordinates: customerLocation },
+          immediate: true,
+        };
+        const mockResult = dispatchWorker(request, workers);
+        setDispatchResult(mockResult);
+        return mockResult.candidates.map((c) => ({
+          id: c.worker.id,
+          name: c.worker.name,
+          rating: c.worker.rating,
+          completedJobs: c.worker.completedJobs,
+          distanceKm: c.distance,
+          etaMinutes: c.estimatedArrival,
+          photoUrl: illustrationByService[selectedService.name],
+          city: 'Pune',
+        }));
+      } catch {
+        // Local dispatch can legitimately find nobody; treat as empty, not an error.
+        return [];
+      }
+    };
 
     try {
-      // Query backend geospatial search
       const res = await workersApi.searchNearby(
         customerLocation.lat,
         customerLocation.lng,
-        selectedService.name
+        searchTerm
       );
 
       const realWorkers = res.workers || [];
@@ -414,72 +302,35 @@ export function CustomerHome() {
           photoUrl: w.photo_url || illustrationByService[selectedService.name],
           city: w.city || 'Pune',
         }));
-
         setCandidates(mappedCandidates);
-        setSelectedWorkerIndex(0);
       } else {
-        // Fallback to local dispatch engine
-        const request: ServiceRequest = {
-          serviceCategory: selectedService.name,
-          serviceSubcategory: selectedService.subcategories[0]?.name || '',
-          description: description.trim(),
-          location: { address: 'Kothrud, Pune', coordinates: customerLocation },
-          immediate: true,
-        };
-        const mockResult = dispatchWorker(request, workers);
-        setDispatchResult(mockResult);
-
-        const fallbackCandidates: CandidateDisplay[] = mockResult.candidates.map((c) => ({
-          id: c.worker.id,
-          name: c.worker.name,
-          rating: c.worker.rating,
-          completedJobs: c.worker.completedJobs,
-          distanceKm: c.distance,
-          etaMinutes: c.estimatedArrival,
-          photoUrl: illustrationByService[selectedService.name],
-          city: 'Pune',
-        }));
-        setCandidates(fallbackCandidates);
-        setSelectedWorkerIndex(0);
+        setCandidates(buildLocalFallback());
       }
     } catch (err) {
       console.error('Worker search failed, using local dispatch:', err);
-      const request: ServiceRequest = {
-        serviceCategory: selectedService.name,
-        serviceSubcategory: selectedService.subcategories[0]?.name || '',
-        description: description.trim(),
-        location: { address: 'Kothrud, Pune', coordinates: customerLocation },
-        immediate: true,
-      };
-      const mockResult = dispatchWorker(request, workers);
-      setDispatchResult(mockResult);
-
-      const fallbackCandidates: CandidateDisplay[] = mockResult.candidates.map((c) => ({
-        id: c.worker.id,
-        name: c.worker.name,
-        rating: c.worker.rating,
-        completedJobs: c.worker.completedJobs,
-        distanceKm: c.distance,
-        etaMinutes: c.estimatedArrival,
-        photoUrl: illustrationByService[selectedService.name],
-        city: 'Pune',
-      }));
-      setCandidates(fallbackCandidates);
-      setSelectedWorkerIndex(0);
+      setCandidates(buildLocalFallback());
     }
+  };
+
+  const retryFromRequest = () => {
+    setSearchError(null);
+    setStage('request');
   };
 
   const handleBookWorker = async () => {
     if (!selectedService || candidates.length === 0) return;
     setIsBooking(true);
+    setBookingError(null);
 
     const chosen = candidates[selectedWorkerIndex];
     const customerLocation = { lat: 18.5074, lng: 73.8077 };
-    const price = 500;
+    // Use the selected service's minimum price as the starting estimate.
+    const price = startingEstimate > 0 ? startingEstimate : selectedService.subcategories[0]?.priceRange.min ?? 0;
 
     try {
       const res = await jobsApi.create({
         service_category_name: selectedService.name,
+        service_subcategory_name: selectedSubcategory?.name,
         description: description.trim() || `${selectedService.name} service request`,
         address: 'Kothrud, Pune',
         location: customerLocation,
@@ -487,35 +338,92 @@ export function CustomerHome() {
         worker_id: chosen.id,
       });
 
-      if (res?.job?.id) {
-        setCreatedJobId(res.job.id);
+      const jobId = res?.job?.id;
+
+      // Only proceed to the matched/live-job experience with a REAL backend job id.
+      if (jobId) {
+        setCreatedJobId(jobId);
+        setStage('matched');
+      } else {
+        setBookingError(
+          'Booking could not be confirmed: the server did not return a job reference. Please try again.'
+        );
       }
-      setStage('matched');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Job creation API error:', err);
-      // Still allow tracking with a synthetic ID
-      setCreatedJobId(`JOB-${Date.now().toString().slice(-6)}`);
-      setStage('matched');
+      // Surface the exact backend error message; never fake a successful booking.
+      setBookingError(err?.message || 'Job creation failed. Please try again.');
     } finally {
       setIsBooking(false);
     }
   };
 
-  if (stage === 'request' && selectedService) {
+  // Stage: category-specific service discovery
+  if (stage === 'services' && selectedService) {
     return (
-      <CustomerRequestForm
-        service={selectedService}
-        description={description}
-        setDescription={setDescription}
-        urgency={urgency}
-        setUrgency={setUrgency}
-        uploadedImage={uploadedImage}
-        isDiagnosing={isDiagnosing}
-        aiDiagnosisBadge={aiDiagnosisBadge}
-        onUpload={handleImageUpload}
+      <ServiceSelection
+        category={selectedService}
+        illustration={illustrationByService[selectedService.name]}
+        surfaceClass={surfaceByService[selectedService.name] || 'bg-[#f5f5f5]'}
+        onSelectService={selectSubcategory}
         onBack={() => setStage('browse')}
-        onFind={handleFindWorker}
       />
+    );
+  }
+
+  // Stage: single service detail
+  if (stage === 'details' && selectedService && selectedSubcategory) {
+    return (
+      <ServiceDetails
+        category={selectedService}
+        service={selectedSubcategory}
+        illustration={illustrationByService[selectedService.name]}
+        surfaceClass={surfaceByService[selectedService.name] || 'bg-[#f5f5f5]'}
+        onRequestService={startBooking}
+        onBack={() => setStage('services')}
+      />
+    );
+  }
+
+  // Stage: request / booking form (reuses existing behaviour, keeps service context)
+  if (stage === 'request' && selectedService && selectedSubcategory) {
+    return (
+      <div>
+        <BookingForm
+          category={selectedService}
+          service={selectedSubcategory}
+          description={description}
+          setDescription={setDescription}
+          urgency={urgency}
+          setUrgency={setUrgency}
+          uploadedImage={uploadedImage}
+          isDiagnosing={isDiagnosing}
+          aiDiagnosisBadge={aiDiagnosisBadge}
+          onUpload={handleImageUpload}
+          onBack={() => setStage('details')}
+          onFind={handleFindWorker}
+        />
+        {searchError && (
+          <div className="mx-auto max-w-6xl px-4 pb-10 sm:px-5 md:px-10">
+            <div className="flex flex-col items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <AlertCircle size={20} className="mt-0.5 flex-shrink-0 text-amber-600" />
+                <div>
+                  <p className="text-sm font-semibold text-text-navy">No workers found</p>
+                  <p className="mt-1 text-sm text-text-secondary">{searchError}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleFindWorker}
+                disabled={description.trim().length < 5 || isDiagnosing}
+                className="inline-flex items-center gap-2 rounded-2xl bg-accent-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-status-neutral"
+              >
+                <RefreshCw size={15} /> Try again
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -607,12 +515,22 @@ export function CustomerHome() {
             })}
           </div>
 
+          {bookingError && (
+            <div className="mt-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
+              <AlertCircle size={18} className="mt-0.5 flex-shrink-0 text-red-600" />
+              <div>
+                <p className="text-sm font-semibold text-red-700">Booking failed</p>
+                <p className="mt-1 text-sm text-red-600">{bookingError}</p>
+              </div>
+            </div>
+          )}
+
           <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-status-subtle pt-6 sm:flex-row">
             <button
               onClick={() => setStage('request')}
               className="text-xs font-semibold text-text-secondary hover:text-text-navy"
             >
-              ← Back to Details
+              ← Back to request
             </button>
             <button
               onClick={handleBookWorker}
@@ -671,13 +589,14 @@ export function CustomerHome() {
           </div>
           <button
             onClick={() =>
-              navigate(`/job/${createdJobId || 'DEMO001'}`, {
+              navigate(`/job/${createdJobId}`, {
                 state: {
                   service: selectedService.name,
+                  subcategory: selectedSubcategory?.name,
                   worker: chosen,
                   eta: Math.max(chosen.etaMinutes, 6),
                   jobId: createdJobId,
-                  price: 500,
+                  price: startingEstimate,
                 },
               })
             }
@@ -801,7 +720,7 @@ export function CustomerHome() {
         </div>
         <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
           {services.map((service, index) => (
-            <ServiceCard key={service.id} service={service} index={index} onSelect={() => selectService(service.id)} />
+            <ServiceCard key={service.id} service={service} index={index} onSelect={() => selectCategory(service.id)} />
           ))}
         </div>
       </section>
