@@ -14,12 +14,13 @@ import {
   Clock,
   UserCheck
 } from 'lucide-react';
-import type { ServiceCategory } from '../../types/service';
+import type { ServiceCategory, ServiceSubcategory } from '../../types/service';
 import { CreateServiceRequest } from './CreateServiceRequest';
+import { ServiceSelection } from './ServiceSelection';
 import { MyServiceRequests } from './MyServiceRequests';
 import { servicesApi, jobsApi, workersApi, geospatialApi } from '../../lib/api';
 
-type CustomerStage = 'browse' | 'request' | 'dispatch' | 'matched' | 'my_requests';
+type CustomerStage = 'browse' | 'select' | 'request' | 'dispatch' | 'matched' | 'my_requests';
 
 const illustrationByService: Record<string, string> = {
   Plumbing: '/illustrations/plumber.png',
@@ -121,6 +122,8 @@ export function CustomerHome() {
 
   // Selected Category for creation form
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | null>(null);
+  // Selected Sub-service within the chosen category
+  const [selectedSubcategory, setSelectedSubcategory] = useState<ServiceSubcategory | null>(null);
 
   // GPS Location
   const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -146,7 +149,16 @@ export function CustomerHome() {
             description: c.description || `Professional ${c.name} services`,
             avgPrice: `₹${c.avg_price_min || 300}—₹${c.avg_price_max || 2000}`,
             avgDuration: `${Math.round((c.avg_duration_min || 60) / 60)}-${Math.round((c.avg_duration_max || 120) / 60)} hrs`,
-            subcategories: [],
+            subcategories: Array.isArray(c.subcategories)
+              ? c.subcategories.map((s: any) => ({
+                  id: s.id,
+                  name: s.name,
+                  description: s.description || '',
+                  requiredSkills: [],
+                  priceRange: { min: s.price_min || 300, max: s.price_max || 1500 },
+                  durationRange: { min: s.duration_min || 30, max: s.duration_max || 120 },
+                }))
+              : [],
           }));
           setServices(mapped);
         }
@@ -229,9 +241,17 @@ export function CustomerHome() {
     };
   }, [stage, activeJob?.id]);
 
-  // Handler: Start Request for a specific category
+  // Handler: Category selected → show sub-service selection
   const handleStartRequest = (cat?: ServiceCategory) => {
-    setSelectedCategory(cat || services[0] || null);
+    const category = cat || services[0] || null;
+    setSelectedCategory(category);
+    setSelectedSubcategory(null);
+    setStage('select');
+  };
+
+  // Handler: Sub-service selected → open the request form
+  const handleSelectSubcategory = (subcategory: ServiceSubcategory) => {
+    setSelectedSubcategory(subcategory);
     setStage('request');
   };
 
@@ -241,6 +261,7 @@ export function CustomerHome() {
     const payload = {
       service_category_id: requestData.serviceCategoryId,
       service_category_name: requestData.serviceCategoryName,
+      service_subcategory_name: requestData.serviceSubcategoryName,
       title: requestData.title,
       description: requestData.description,
       address: requestData.address,
@@ -264,15 +285,29 @@ export function CustomerHome() {
     }
   };
 
+  // STAGE: Sub-service Selection
+  if (stage === 'select' && selectedCategory) {
+    return (
+      <ServiceSelection
+        category={selectedCategory}
+        illustration={illustrationByService[selectedCategory.name]}
+        surfaceClass={surfaceByService[selectedCategory.name] || 'bg-[#f5f5f5]'}
+        onSelectService={handleSelectSubcategory}
+        onBack={() => setStage('browse')}
+      />
+    );
+  }
+
   // STAGE: Request a Service Form
   if (stage === 'request') {
     return (
       <CreateServiceRequest
         categories={services}
         initialCategory={selectedCategory}
+        initialSubcategory={selectedSubcategory}
         customerLocation={customerLocation}
         customerAddress={customerAddress}
-        onBack={() => setStage('browse')}
+        onBack={() => setStage('select')}
         onSubmit={handleSubmitRequest}
       />
     );

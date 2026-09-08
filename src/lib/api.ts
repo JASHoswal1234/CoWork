@@ -20,8 +20,17 @@ export function setToken(token: string): void {
   localStorage.setItem('sahakar_token', token);
 }
 
+export function getRefreshToken(): string | null {
+  return localStorage.getItem('sahakar_refresh_token');
+}
+
+export function setRefreshToken(token: string): void {
+  localStorage.setItem('sahakar_refresh_token', token);
+}
+
 export function clearToken(): void {
   localStorage.removeItem('sahakar_token');
+  localStorage.removeItem('sahakar_refresh_token');
   localStorage.removeItem('sahakar_user');
   localStorage.removeItem('demo_worker_id');
 }
@@ -33,6 +42,54 @@ export function getStoredUser(): any | null {
 
 export function setStoredUser(user: any): void {
   localStorage.setItem('sahakar_user', JSON.stringify(user));
+}
+
+/**
+ * Safe token diagnostics — NEVER logs the full token value.
+ * Safe to call during development; produces a single console.warn line.
+ */
+export function logTokenDiagnostics(label = 'token check'): void {
+  const token = getToken();
+  const refreshToken = getRefreshToken();
+  const user = getStoredUser();
+
+  if (!token) {
+    console.warn(`[auth:${label}] access_token: MISSING`);
+    return;
+  }
+
+  // Decode the JWT payload locally (no verification, just inspection)
+  let expiry: number | null = null;
+  let userId: string | null = null;
+  try {
+    const parts = token.split('.');
+    if (parts.length === 3) {
+      const payload = JSON.parse(atob(parts[1]));
+      expiry = payload.exp ?? null;
+      userId = payload.sub ?? null;
+    }
+  } catch {
+    // Not a standard JWT (e.g. demo-token-*) — that's fine
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const tokenLength = token.length;
+  const isDemo = token.startsWith('demo-token-');
+  const isExpired = expiry !== null && expiry < now;
+  const expiresInSec = expiry !== null ? expiry - now : null;
+
+  console.warn(
+    `[auth:${label}]`,
+    `token_present=true`,
+    `length=${tokenLength}`,
+    `is_demo=${isDemo}`,
+    isDemo ? '' : `user_id=${userId ?? 'unknown'}`,
+    expiry !== null
+      ? `expires_in=${expiresInSec}s (${isExpired ? 'EXPIRED' : 'valid'})`
+      : 'expiry=unknown',
+    `refresh_token_present=${!!refreshToken}`,
+    `stored_role=${user?.role ?? 'none'}`,
+  );
 }
 
 // ─── Error Types ─────────────────────────────────────────────────────────────
@@ -55,37 +112,22 @@ export class ApiException extends Error {
     this.name = 'ApiException';
   }
 
-  /**
-   * Checks if error is a specific type
-   */
   is(code: string): boolean {
     return this.code === code;
   }
 
-  /**
-   * Checks if error is an authentication error
-   */
   isAuthError(): boolean {
     return this.code === 'UNAUTHORIZED' || this.code === 'FORBIDDEN' || this.status === 401 || this.status === 403;
   }
 
-  /**
-   * Checks if error is a validation error
-   */
   isValidationError(): boolean {
     return this.code === 'VALIDATION_ERROR' || this.status === 400;
   }
 
-  /**
-   * Checks if error is a network/server error
-   */
   isNetworkError(): boolean {
     return this.code === 'SERVER_UNAVAILABLE' || this.code === 'NETWORK_ERROR' || this.status === 0;
   }
 
-  /**
-   * Checks if error is a not found error
-   */
   isNotFoundError(): boolean {
     return this.code === 'NOT_FOUND' || this.status === 404;
   }
@@ -93,9 +135,59 @@ export class ApiException extends Error {
 
 // ─── HTTP Client ─────────────────────────────────────────────────────────────
 
+// Guards against concurrent refresh attempts
+let _refreshPromise: Promise<boolean> | null = null;
+
+/**
+ * Attempts a silent token refresh using the stored refresh_token.
+ * Returns true if a new access_token was obtained, false otherwise.
+ * Demo tokens (demo-token-*) are never refreshed via this path.
+ */
+async function tryRefreshToken(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+
+  // Demo tokens don't expire — nothing to refresh
+  const currentToken = getToken();
+  if (currentToken?.startsWith('demo-token-')) return false;
+
+  if (!refreshToken) return false;
+
+  // Deduplicate concurrent refresh calls
+  if (_refreshPromise) return _refreshPromise;
+
+  _refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+
+      if (!res.ok) return false;
+
+      const body = await res.json();
+      const newAccess = body?.data?.session?.access_token;
+      const newRefresh = body?.data?.session?.refresh_token;
+
+      if (!newAccess) return false;
+
+      setToken(newAccess);
+      if (newRefresh) setRefreshToken(newRefresh);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+
+  return _refreshPromise;
+}
+
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  _isRetry = false,
 ): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -111,40 +203,13 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  let res: Response;
   try {
-    const res = await fetch(`${API_BASE}${endpoint}`, {
+    res = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
       headers,
     });
-
-    // Handle network errors or empty responses
-    let data: any;
-    try {
-      data = await res.json();
-    } catch (parseError) {
-      if (!res.ok) {
-        throw new ApiException(
-          'NETWORK_ERROR',
-          `Request failed: ${res.status}`,
-          res.status
-        );
-      }
-      throw parseError;
-    }
-
-    if (!res.ok) {
-      // Backend error response
-      throw new ApiException(
-        data.error?.code || 'REQUEST_FAILED',
-        data.error?.message || `Request failed: ${res.status}`,
-        res.status,
-        data.error?.details
-      );
-    }
-
-    return data.data ?? data;
   } catch (error) {
-    // Network error (server unavailable)
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new ApiException(
         'SERVER_UNAVAILABLE',
@@ -154,6 +219,49 @@ async function request<T>(
     }
     throw error;
   }
+
+  // ── 401 handling: try silent refresh once, then give up cleanly ──
+  if (res.status === 401 && !_isRetry) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      // Retry the original request with the new token
+      return request<T>(endpoint, options, true);
+    }
+    // Refresh failed or not possible — clear stale credentials so the
+    // AuthContext's isAuthenticated check returns false on next render.
+    clearToken();
+    throw new ApiException(
+      'UNAUTHORIZED',
+      'Your session has expired. Please log in again.',
+      401
+    );
+  }
+
+  // Handle network errors or empty responses
+  let data: any;
+  try {
+    data = await res.json();
+  } catch (parseError) {
+    if (!res.ok) {
+      throw new ApiException(
+        'NETWORK_ERROR',
+        `Request failed: ${res.status}`,
+        res.status
+      );
+    }
+    throw parseError;
+  }
+
+  if (!res.ok) {
+    throw new ApiException(
+      data.error?.code || 'REQUEST_FAILED',
+      data.error?.message || `Request failed: ${res.status}`,
+      res.status,
+      data.error?.details
+    );
+  }
+
+  return data.data ?? data;
 }
 
 // ─── Auth API ─────────────────────────────────────────────────────────────────
@@ -399,14 +507,21 @@ export const mlApi = {
     const formData = new FormData();
     formData.append('image', imageFile);
 
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const res = await fetch(`${API_BASE}/api/ml/analyze-image`, {
       method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers,
       body: formData,
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error?.message || 'Image analysis failed');
+    if (!res.ok) throw new ApiException(
+      data.error?.code || 'ANALYSIS_FAILED',
+      data.error?.message || 'Image analysis failed',
+      res.status,
+    );
     return data.data;
   },
 };

@@ -7,13 +7,33 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+
+      # ── Supabase ──────────────────────────────────────────────────────────
+      # Classic JWT keys — required for supabase.auth.getUser() to work.
+      # These MUST be set to the eyJ... values from Supabase > Settings > API.
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+
+      # New-style Supabase keys (sb_publishable / sb_secret).
+      # Declared here so Render exposes them; the backend prefers the classic
+      # JWT keys above and only falls back to these if the JWT keys are absent.
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+
+      # ── App ───────────────────────────────────────────────────────────────
+      - key: FRONTEND_URL
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: FRONTEND_URL
+
+      # ── Payments ─────────────────────────────────────────────────────────
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
         sync: false

@@ -15,12 +15,14 @@ import {
   IndianRupee,
   Navigation
 } from 'lucide-react';
-import type { ServiceCategory } from '../../types/service';
+import type { ServiceCategory, ServiceSubcategory } from '../../types/service';
 import { filesApi, mlApi, geospatialApi } from '../../lib/api';
 
 interface CreateServiceRequestProps {
   categories: ServiceCategory[];
   initialCategory?: ServiceCategory | null;
+  /** The sub-service the customer already chose in ServiceSelection. */
+  initialSubcategory?: ServiceSubcategory | null;
   customerLocation?: { lat: number; lng: number } | null;
   customerAddress?: string;
   onBack: () => void;
@@ -55,19 +57,23 @@ interface ImageUploadItem {
 export function CreateServiceRequest({
   categories,
   initialCategory,
+  initialSubcategory,
   customerLocation: initialLocation,
   customerAddress: initialAddress,
   onBack,
   onSubmit,
 }: CreateServiceRequestProps) {
-  // Step State (1: General Problem, 2: Job Details)
+  // Step State (1: Problem Details, 2: Job Details)
   const [step, setStep] = useState<1 | 2>(1);
 
-  // 1. Service Category & Problem
-  const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | null>(
+  // 1. Service Category & Sub-service (both locked from prior selection)
+  const [selectedCategory] = useState<ServiceCategory | null>(
     initialCategory || categories[0] || null
   );
-  const [title, setTitle] = useState('');
+  const [selectedSubcategory] = useState<ServiceSubcategory | null>(
+    initialSubcategory || null
+  );
+  const [title, setTitle] = useState(initialSubcategory?.name || '');
   const [description, setDescription] = useState('');
 
   // 2. Images & AI Vision Diagnosis
@@ -97,9 +103,13 @@ export function CreateServiceRequest({
   // 5. Urgency
   const [urgency, setUrgency] = useState<'normal' | 'urgent' | 'emergency'>('normal');
 
-  // 6. Budget
-  const [minBudget, setMinBudget] = useState<string>('500');
-  const [maxBudget, setMaxBudget] = useState<string>('800');
+  // 6. Budget — pre-fill from the chosen sub-service's price range when available
+  const [minBudget, setMinBudget] = useState<string>(
+    String(initialSubcategory?.priceRange?.min || 500)
+  );
+  const [maxBudget, setMaxBudget] = useState<string>(
+    String(initialSubcategory?.priceRange?.max || 800)
+  );
 
   // 7. Additional Instructions
   const [additionalInstructions, setAdditionalInstructions] = useState('');
@@ -107,12 +117,6 @@ export function CreateServiceRequest({
   // Form Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!selectedCategory && categories.length > 0) {
-      setSelectedCategory(initialCategory || categories[0]);
-    }
-  }, [categories, initialCategory, selectedCategory]);
 
   const handleDetectLocation = () => {
     if (isLocating) return;
@@ -318,6 +322,7 @@ export function CreateServiceRequest({
       await onSubmit({
         serviceCategoryId: selectedCategory.id,
         serviceCategoryName: selectedCategory.name,
+        serviceSubcategoryName: selectedSubcategory?.name,
         title: title.trim(),
         description: finalDescription,
         address: address.trim(),
@@ -347,7 +352,7 @@ export function CreateServiceRequest({
             onClick={step === 2 ? () => setStep(1) : onBack}
             className="inline-flex items-center gap-2 font-mono text-xs font-semibold text-text-secondary hover:text-text-navy"
           >
-            <ArrowLeft size={16} /> {step === 2 ? 'BACK TO STEP 1' : 'BACK TO SERVICES'}
+            <ArrowLeft size={16} /> {step === 2 ? 'BACK TO STEP 1' : 'BACK TO SUB-SERVICES'}
           </button>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -363,8 +368,27 @@ export function CreateServiceRequest({
             </div>
           </div>
 
+          {/* Selected service context badge */}
+          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-accent-primary/20 bg-accent-light/30 px-4 py-3">
+            <div className="flex-1 min-w-0">
+              <p className="font-mono text-[9px] font-bold tracking-[0.14em] text-accent-primary uppercase">
+                {selectedCategory?.name}
+              </p>
+              <p className="mt-0.5 text-sm font-extrabold text-text-navy truncate">
+                {selectedSubcategory?.name || selectedCategory?.name}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex-shrink-0 font-mono text-[10px] font-bold text-accent-primary hover:text-accent-hover underline"
+            >
+              Change
+            </button>
+          </div>
+
           {/* Two-Step Progress Indicator */}
-          <div className="mt-6 flex items-center gap-3">
+          <div className="mt-5 flex items-center gap-3">
             <button
               type="button"
               onClick={() => setStep(1)}
@@ -374,7 +398,7 @@ export function CreateServiceRequest({
                   : 'bg-white text-text-navy border border-status-subtle'
               }`}
             >
-              <span>1. General Problem & Domain</span>
+              <span>1. Problem & Location</span>
             </button>
             <div className="h-0.5 w-6 bg-status-subtle" />
             <button
@@ -404,68 +428,34 @@ export function CreateServiceRequest({
         {/* STEP 1: GENERAL PROBLEM & SERVICE DOMAIN */}
         {step === 1 && (
           <form onSubmit={handleProceedToStep2} className="space-y-8 p-6 sm:p-10">
-            {/* SECTION 1: Service Category / Domain */}
+            {/* SECTION 1: Specific Problem / Title */}
             <div>
               <label className="block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-text-navy">
-                1. Service Domain / Category <span className="text-red-500">*</span>
-              </label>
-              <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-6">
-                {categories.map((cat) => {
-                  const isSelected = selectedCategory?.id === cat.id;
-                  return (
-                    <button
-                      type="button"
-                      key={cat.id}
-                      onClick={() => setSelectedCategory(cat)}
-                      className={`flex flex-col items-center justify-center rounded-2xl border p-3 text-center transition-all ${
-                        isSelected
-                          ? 'border-accent-primary bg-accent-light text-accent-primary font-bold shadow-sm'
-                          : 'border-status-subtle bg-white text-text-secondary hover:border-accent-primary/40 hover:text-text-navy'
-                      }`}
-                    >
-                      <span className="text-2xl mb-1">
-                        {cat.name === 'Plumbing' && '🔧'}
-                        {cat.name === 'Electrical' && '⚡'}
-                        {cat.name === 'Carpentry' && '🪚'}
-                        {cat.name === 'Painting' && '🎨'}
-                        {cat.name === 'Cleaning' && '🧹'}
-                        {cat.name === 'Appliance Repair' && '🔌'}
-                        {cat.name === 'Gardening' && '🌱'}
-                        {cat.name === 'Driver' && '🚗'}
-                        {cat.name === 'Caregiving' && '🩺'}
-                        {cat.name === 'Technician' && '🛠️'}
-                        {!['Plumbing','Electrical','Carpentry','Painting','Cleaning','Appliance Repair','Gardening','Driver','Caregiving','Technician'].includes(cat.name) && '🛠️'}
-                      </span>
-                      <span className="text-xs tracking-tight">{cat.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* SECTION 2: Specific Problem Title */}
-            <div>
-              <label className="block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-text-navy">
-                2. What problem do you need fixed? <span className="text-red-500">*</span>
+                1. What problem do you need fixed? <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g., Wire fixing, switchboard spark, kitchen sink pipe leakage, lock repair"
+                placeholder={
+                  selectedSubcategory
+                    ? `e.g., ${selectedSubcategory.description || selectedSubcategory.name}`
+                    : 'e.g., Wire fixing, kitchen sink pipe leakage, lock repair'
+                }
                 className="mt-2 w-full rounded-2xl border border-status-subtle bg-white px-4 py-3.5 text-sm font-medium text-text-navy placeholder:text-text-tertiary focus:border-accent-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/20"
                 required
               />
               <p className="mt-1 text-[11px] text-text-tertiary">
-                This demand will be broadcast to all qualified specialists in the selected <strong>{selectedCategory?.name || 'service'}</strong> domain.
+                This request will be broadcast to all certified{' '}
+                <strong>{selectedSubcategory?.name || selectedCategory?.name || 'service'}</strong> specialists nearby.
               </p>
             </div>
 
-            {/* SECTION 3: Service Location */}
+            {/* SECTION 2: Service Location */}
             <div>
               <div className="flex items-center justify-between">
                 <label className="block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-text-navy">
-                  3. Service Location <span className="text-red-500">*</span>
+                  2. Service Location <span className="text-red-500">*</span>
                 </label>
                 <button
                   type="button"
@@ -503,11 +493,11 @@ export function CreateServiceRequest({
               </div>
             </div>
 
-            {/* SECTION 4: Preferred Date & Time */}
+            {/* SECTION 3: Preferred Date & Time */}
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div>
                 <label className="block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-text-navy">
-                  4. Preferred Date
+                  3. Preferred Date
                 </label>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {['Today', 'Tomorrow', 'Custom'].map((d) => (
@@ -538,7 +528,7 @@ export function CreateServiceRequest({
 
               <div>
                 <label className="block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-text-navy">
-                  5. Preferred Time Slot
+                  4. Preferred Time Slot
                 </label>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {['ASAP (within 1 hr)', 'Today, 6:00–8:00 PM', 'Tomorrow 10 AM–12 PM', 'Custom'].map((t) => (
@@ -582,11 +572,11 @@ export function CreateServiceRequest({
         {/* STEP 2: JOB DETAILS, BUDGET & PHOTOS */}
         {step === 2 && (
           <form onSubmit={handleSubmit} className="space-y-8 p-6 sm:p-10">
-            {/* Selected Domain Summary Badge */}
+            {/* Selected Service Summary Badge */}
             <div className="flex items-center justify-between rounded-2xl bg-accent-light/40 p-4 border border-accent-primary/20">
               <div>
                 <p className="font-mono text-[9px] font-bold tracking-wider text-accent-primary uppercase">
-                  DOMAIN: {selectedCategory?.name}
+                  {selectedCategory?.name}{selectedSubcategory ? ` · ${selectedSubcategory.name}` : ''}
                 </p>
                 <p className="text-base font-extrabold text-text-navy">{title}</p>
                 <p className="text-xs text-text-secondary">{address}</p>
@@ -596,7 +586,7 @@ export function CreateServiceRequest({
                 onClick={() => setStep(1)}
                 className="font-mono text-xs font-bold text-accent-primary underline hover:text-accent-hover"
               >
-                Edit Step 1
+                Edit
               </button>
             </div>
 
