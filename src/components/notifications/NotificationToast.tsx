@@ -112,9 +112,13 @@ export function NotificationToast() {
           </button>
           <button
             onClick={handleAction}
-            className="flex items-center gap-1 rounded-xl bg-accent-primary px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-accent-hover transition"
+            className={`flex items-center gap-1 rounded-xl px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition ${
+              activeToast.type === 'JOB_COMPLETED'
+                ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400/30'
+                : 'bg-accent-primary hover:bg-accent-hover'
+            }`}
           >
-            <span>View Details</span>
+            <span>{activeToast.type === 'JOB_COMPLETED' ? 'Pay Now' : 'View Details'}</span>
             <ArrowRight size={13} />
           </button>
         </div>

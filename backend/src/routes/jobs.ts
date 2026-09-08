@@ -878,9 +878,11 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
       }
     }
 
+    const previousStatus = job.status;
+
     if (userRole === 'worker') {
       // Workers may only update jobs assigned to them
-      let workerProfile: any = inMemoryStore.getWorkerByUserId(userId);
+      let workerProfile: any = inMemoryStore.getWorkerByUserId(userId) || inMemoryStore.getWorkerById(userId);
       if (!workerProfile) {
         try {
           const { data } = await supabaseAdmin
@@ -888,7 +890,19 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
           workerProfile = data;
         } catch {}
       }
-      const workerIds = new Set([userId, workerProfile?.id, workerProfile?.user_id].filter(Boolean));
+      if (!workerProfile) {
+        try {
+          const { data } = await supabaseAdmin
+            .from('workers').select('id, user_id').eq('id', userId).maybeSingle();
+          workerProfile = data;
+        } catch {}
+      }
+      const workerIds = new Set([
+        userId,
+        workerProfile?.id,
+        workerProfile?.user_id,
+      ].filter(Boolean));
+
       if (!job.worker_id || !workerIds.has(job.worker_id)) {
         res.status(403).json({
           success: false,
@@ -916,8 +930,6 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
       try {
         // Mark all outstanding dispatch attempts as cancelled so workers
         // can no longer see or accept this request.
-        // 'notified' is the initial status — attempts in this state have not
-        // yet been acted on by a worker and must be cancelled.
         for (const attempt of inMemoryStore.dispatchAttempts) {
           if (attempt.job_id === id && attempt.response === 'notified') {
             attempt.response = 'cancelled';
@@ -978,23 +990,42 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
         .eq('id', id);
     } catch {}
 
+    // Record job status history
+    try {
+      await supabaseAdmin.from('job_status_history').insert({
+        job_id: id,
+        from_status: previousStatus,
+        to_status: newStatus,
+        changed_by_user_id: userId,
+        reason: reason || null,
+        created_at: new Date().toISOString(),
+      });
+    } catch {}
+
     const earned =
       newStatus === 'completed'
         ? Math.round((job.actual_price || job.estimated_price || 600) * 0.85)
         : undefined;
 
     // ── Lifecycle notifications ───────────────────────────────────────────
-    if (newStatus === 'on_the_way' || newStatus === 'arrived') {
+    if (newStatus === 'on_the_way') {
       if (job.customer_id) {
         createNotification({
           user_id: job.customer_id,
           type: 'WORKER_ON_THE_WAY',
-          title: newStatus === 'arrived' ? 'Worker Arrived' : 'Worker On The Way',
-          message:
-            newStatus === 'arrived'
-              ? `${job.worker_name || 'Your worker'} has arrived at your location.`
-              : `${job.worker_name || 'Your worker'} is on the way to your location.`,
-          data: { job_id: id, status: newStatus },
+          title: 'Worker On The Way',
+          message: `${job.worker_name || 'Worker'} is on the way.`,
+          data: { job_id: id, status: 'on_the_way' },
+        }).catch(console.warn);
+      }
+    } else if (newStatus === 'arrived') {
+      if (job.customer_id) {
+        createNotification({
+          user_id: job.customer_id,
+          type: 'WORKER_ON_THE_WAY',
+          title: 'Worker Arrived',
+          message: `${job.worker_name || 'Worker'} has arrived.`,
+          data: { job_id: id, status: 'arrived' },
         }).catch(console.warn);
       }
     } else if (newStatus === 'in_progress') {
@@ -1002,9 +1033,9 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
         createNotification({
           user_id: job.customer_id,
           type: 'JOB_STARTED',
-          title: 'Work Started',
-          message: `${job.worker_name || 'Your worker'} has started work on your service.`,
-          data: { job_id: id, status: newStatus },
+          title: 'Service In Progress',
+          message: 'Your service is now in progress.',
+          data: { job_id: id, status: 'in_progress' },
         }).catch(console.warn);
       }
     } else if (newStatus === 'completed') {
@@ -1012,13 +1043,13 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
         createNotification({
           user_id: job.customer_id,
           type: 'JOB_COMPLETED',
-          title: 'Service Completed',
-          message: `Your ${job.service_category_name || 'service'} request has been marked complete.`,
+          title: 'Job Completed',
+          message: 'Service has been completed.',
           data: { job_id: id, status: 'completed' },
         }).catch(console.warn);
       }
-      const workerUser = job.worker_id ? inMemoryStore.getWorkerById(job.worker_id) : null;
-      const workerUserId = workerUser?.user_id;
+      const workerUser = job.worker_id ? (inMemoryStore.getWorkerById(job.worker_id) || inMemoryStore.getWorkerByUserId(job.worker_id)) : null;
+      const workerUserId = workerUser?.user_id || job.worker_id;
       if (workerUserId) {
         createNotification({
           user_id: workerUserId,

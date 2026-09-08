@@ -144,6 +144,8 @@ export function WorkerDashboard() {
     }
   };
 
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+
   // Handler: Accept Incoming Request
   const handleAcceptRequest = async (jobId: string) => {
     setAcceptingId(jobId);
@@ -189,11 +191,51 @@ export function WorkerDashboard() {
 
   // Handler: Worker updates status of active job
   const handleUpdateJobStatus = async (jobId: string, nextStatus: string) => {
+    if (updatingStatusId) return; // Prevent concurrent clicks
+    setUpdatingStatusId(jobId);
+    setActionMessage(null);
+
+    // Save previous state for rollback if needed
+    const prevJobs = [...jobs];
+
+    // Optimistic UI update
+    setJobs((currentJobs) =>
+      currentJobs.map((j) => (j.id === jobId ? { ...j, status: nextStatus } : j))
+    );
+
     try {
-      await jobsApi.updateStatus(jobId, nextStatus);
-      fetchData();
-    } catch (err) {
-      console.warn('Status update error:', err);
+      const res = await jobsApi.updateStatus(jobId, nextStatus);
+      const updatedJob = (res as any)?.job || (res as any)?.data?.job;
+      if (updatedJob) {
+        setJobs((currentJobs) =>
+          currentJobs.map((j) => (j.id === jobId ? { ...j, ...updatedJob, status: nextStatus } : j))
+        );
+      }
+
+      const statusLabels: Record<string, string> = {
+        on_the_way: 'Status updated: You are now On The Way! Customer notified.',
+        arrived: 'Status updated: You have Arrived! Customer notified.',
+        in_progress: 'Status updated: Service is now In Progress! Customer notified.',
+        completed: 'Job Completed! 85% earnings have been credited to your wallet.',
+      };
+
+      setActionMessage({
+        type: 'success',
+        text: statusLabels[nextStatus] || `Status updated to ${nextStatus.replace('_', ' ')}!`,
+      });
+
+      await fetchData();
+    } catch (err: any) {
+      console.error('Status update error:', err);
+      // Rollback to previous state
+      setJobs(prevJobs);
+      setActionMessage({
+        type: 'error',
+        text: err?.message || 'Failed to update status. Please check your connection and try again.',
+      });
+      await fetchData();
+    } finally {
+      setUpdatingStatusId(null);
     }
   };
 
@@ -693,46 +735,119 @@ export function WorkerDashboard() {
                         </div>
 
                         {/* Lifecycle Status Progression Buttons */}
-                        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-status-subtle pt-4">
-                          <span className="font-mono text-[10px] font-bold text-text-tertiary mr-2">
-                            UPDATE STATUS:
-                          </span>
-                          <button
-                            onClick={() => handleUpdateJobStatus(job.id, 'on_the_way')}
-                            className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
-                              currentStatus === 'on_the_way'
-                                ? 'bg-accent-primary text-white'
-                                : 'border border-status-subtle bg-background-primary text-text-navy hover:bg-white'
-                            }`}
-                          >
-                            1. ON THE WAY
-                          </button>
-                          <button
-                            onClick={() => handleUpdateJobStatus(job.id, 'arrived')}
-                            className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
-                              currentStatus === 'arrived'
-                                ? 'bg-accent-primary text-white'
-                                : 'border border-status-subtle bg-background-primary text-text-navy hover:bg-white'
-                            }`}
-                          >
-                            2. ARRIVED
-                          </button>
-                          <button
-                            onClick={() => handleUpdateJobStatus(job.id, 'in_progress')}
-                            className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
-                              currentStatus === 'in_progress'
-                                ? 'bg-accent-primary text-white'
-                                : 'border border-status-subtle bg-background-primary text-text-navy hover:bg-white'
-                            }`}
-                          >
-                            3. IN PROGRESS
-                          </button>
-                          <button
-                            onClick={() => handleUpdateJobStatus(job.id, 'completed')}
-                            className="rounded-xl bg-green-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-green-700"
-                          >
-                            ✓ COMPLETE JOB
-                          </button>
+                        <div className="mt-5 border-t border-status-subtle pt-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono text-[10px] font-bold text-text-tertiary mr-1">
+                              UPDATE STATUS:
+                            </span>
+
+                            {/* 1. ON THE WAY */}
+                            {currentStatus === 'accepted' ? (
+                              <button
+                                onClick={() => handleUpdateJobStatus(job.id, 'on_the_way')}
+                                disabled={updatingStatusId === job.id}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-accent-primary px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-accent-hover active:scale-[0.98] disabled:opacity-60 cursor-pointer"
+                              >
+                                {updatingStatusId === job.id ? (
+                                  <span className="animate-pulse">UPDATING…</span>
+                                ) : (
+                                  <span>1. ON THE WAY</span>
+                                )}
+                              </button>
+                            ) : ['on_the_way', 'arrived', 'in_progress', 'completed'].includes(currentStatus) ? (
+                              <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                                <CheckCircle2 size={13} /> 1. On The Way
+                              </span>
+                            ) : (
+                              <button
+                                disabled
+                                className="rounded-xl border border-status-subtle bg-gray-50 px-3 py-2 text-xs font-semibold text-text-tertiary opacity-50 cursor-not-allowed"
+                              >
+                                1. ON THE WAY
+                              </button>
+                            )}
+
+                            {/* 2. ARRIVED */}
+                            {currentStatus === 'on_the_way' ? (
+                              <button
+                                onClick={() => handleUpdateJobStatus(job.id, 'arrived')}
+                                disabled={updatingStatusId === job.id}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-accent-primary px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-accent-hover active:scale-[0.98] disabled:opacity-60 cursor-pointer"
+                              >
+                                {updatingStatusId === job.id ? (
+                                  <span className="animate-pulse">UPDATING…</span>
+                                ) : (
+                                  <span>2. ARRIVED</span>
+                                )}
+                              </button>
+                            ) : ['arrived', 'in_progress', 'completed'].includes(currentStatus) ? (
+                              <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                                <CheckCircle2 size={13} /> 2. Arrived
+                              </span>
+                            ) : (
+                              <button
+                                disabled
+                                className="rounded-xl border border-status-subtle bg-gray-50 px-3 py-2 text-xs font-semibold text-text-tertiary opacity-50 cursor-not-allowed"
+                              >
+                                2. ARRIVED
+                              </button>
+                            )}
+
+                            {/* 3. IN PROGRESS */}
+                            {currentStatus === 'arrived' ? (
+                              <button
+                                onClick={() => handleUpdateJobStatus(job.id, 'in_progress')}
+                                disabled={updatingStatusId === job.id}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-accent-primary px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-accent-hover active:scale-[0.98] disabled:opacity-60 cursor-pointer"
+                              >
+                                {updatingStatusId === job.id ? (
+                                  <span className="animate-pulse">UPDATING…</span>
+                                ) : (
+                                  <span>3. IN PROGRESS</span>
+                                )}
+                              </button>
+                            ) : ['in_progress', 'completed'].includes(currentStatus) ? (
+                              <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                                <CheckCircle2 size={13} /> 3. In Progress
+                              </span>
+                            ) : (
+                              <button
+                                disabled
+                                className="rounded-xl border border-status-subtle bg-gray-50 px-3 py-2 text-xs font-semibold text-text-tertiary opacity-50 cursor-not-allowed"
+                              >
+                                3. IN PROGRESS
+                              </button>
+                            )}
+
+                            {/* 4. COMPLETE JOB */}
+                            {currentStatus === 'in_progress' ? (
+                              <button
+                                onClick={() => handleUpdateJobStatus(job.id, 'completed')}
+                                disabled={updatingStatusId === job.id}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-green-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
+                              >
+                                {updatingStatusId === job.id ? (
+                                  <span className="animate-pulse">COMPLETING…</span>
+                                ) : (
+                                  <>
+                                    <CheckCircle2 size={14} />
+                                    <span>COMPLETE JOB</span>
+                                  </>
+                                )}
+                              </button>
+                            ) : currentStatus === 'completed' ? (
+                              <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white">
+                                <CheckCircle2 size={13} /> Completed
+                              </span>
+                            ) : (
+                              <button
+                                disabled
+                                className="rounded-xl border border-status-subtle bg-gray-50 px-3 py-2 text-xs font-semibold text-text-tertiary opacity-50 cursor-not-allowed"
+                              >
+                                ✓ COMPLETE JOB
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
 
