@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { supabase, supabaseAdmin } from '../config/supabase';
 import { authenticate, requireCustomer, requireWorker } from '../middleware/auth';
+import { inMemoryStore } from '../db/inMemoryStore';
 
 const router = Router();
 
@@ -73,11 +74,20 @@ router.post(
       const customerId = req.user!.id;
 
       // ── 1. Verify job ownership + completion ──────────────────────────
-      const { data: job } = await supabaseAdmin
-        .from('jobs')
-        .select('id, status, worker_id, customer_id, actual_price, estimated_price, service_category_name, service_subcategory_name')
-        .eq('id', job_id)
-        .maybeSingle();
+      // Jobs live in inMemoryStore (current session) OR Supabase (persisted).
+      // Must check both — same pattern every other job endpoint uses.
+      let job: any = inMemoryStore.getJob(job_id);
+
+      if (!job) {
+        try {
+          const { data } = await supabaseAdmin
+            .from('jobs')
+            .select('id, status, worker_id, customer_id, actual_price, estimated_price, service_category_name, service_subcategory_name')
+            .eq('id', job_id)
+            .maybeSingle();
+          job = data;
+        } catch {}
+      }
 
       if (!job || job.customer_id !== customerId) {
         res.status(404).json({

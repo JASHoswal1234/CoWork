@@ -195,20 +195,6 @@ export function LiveJob() {
   const toggleFeedback = (label: string) =>
     setFeedback((current) => (current.includes(label) ? current.filter((item) => item !== label) : [...current, label]));
 
-  const handleMarkComplete = async () => {
-    setIsProcessing(true);
-    try {
-      if (jobId && jobId !== 'DEMO001') {
-        await jobsApi.updateStatus(jobId, 'completed');
-      }
-    } catch (err) {
-      console.warn('Update job status error:', err);
-    } finally {
-      setIsProcessing(false);
-      setStage('completed');
-    }
-  };
-
   const handleConfirmPayment = async () => {
     if (!jobId || jobId === 'DEMO001' || checkoutOpenRef.current) return;
 
@@ -501,13 +487,7 @@ export function LiveJob() {
                   {String(eta).padStart(2, '0')} MIN
                 </p>
               </div>
-              <button
-                onClick={handleMarkComplete}
-                disabled={isProcessing}
-                className="rounded-xl border border-accent-primary px-3.5 py-2.5 text-[10px] font-semibold text-accent-primary hover:bg-accent-light disabled:opacity-50 sm:px-4 sm:py-3 sm:text-xs"
-              >
-                {isProcessing ? 'UPDATING…' : 'MARK COMPLETE'}
-              </button>
+              {/* Mark Complete is a worker action — not shown on customer view */}
             </div>
 
             <div className="mt-6 grid grid-cols-4 gap-1 sm:mt-8">
