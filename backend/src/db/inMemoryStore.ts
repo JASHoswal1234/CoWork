@@ -818,8 +818,8 @@ class InMemoryStore {
       ? Number(((workerWorkAmount / totalPlatformWorkAmount) * cooperativePool).toFixed(2))
       : 0;
 
-    // 7. Total Worker Earnings = Direct Service Earnings (85%) + Cooperative Distribution (15% Share)
-    const totalEarnings = Number((directServiceEarnings + cooperativeDistribution).toFixed(2));
+    // 7. Total Worker Earnings = Direct Service Earnings only (85% of job value, 15% deducted as cooperative share)
+    const totalEarnings = directServiceEarnings;
 
     // Retrieve any persisted distributions
     const persistedDistributions = Array.from(this.cooperativeDistributions.values()).filter(
