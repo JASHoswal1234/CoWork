@@ -60,6 +60,7 @@ export interface StoreJob {
   assigned_at?: string | null;
   accepted_at?: string | null;
   completed_at?: string | null;
+  payment_status?: string | null;
   created_at: string;
   updated_at: string;
 }
