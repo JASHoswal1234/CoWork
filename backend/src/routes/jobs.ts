@@ -724,20 +724,33 @@ router.post('/:id/accept', [authenticate, requireWorker], async (req: Request, r
           assigned_at: job.assigned_at,
           updated_at: job.updated_at,
         })
-        .eq('id', id);
+        .or(`id.eq.${job.id},job_number.eq.${job.id}`);
 
       await supabaseAdmin
         .from('job_dispatch_attempts')
         .update({ response: 'accepted' })
-        .eq('job_id', id)
+        .or(`job_id.eq.${job.id},job_id.eq.${id}`)
         .eq('worker_id', workerProfile.id);
 
       await supabaseAdmin
         .from('job_dispatch_attempts')
         .update({ response: 'cancelled' })
-        .eq('job_id', id)
+        .or(`job_id.eq.${job.id},job_id.eq.${id}`)
         .neq('worker_id', workerProfile.id);
-    } catch {}
+    } catch {
+      try {
+        await supabaseAdmin
+          .from('jobs')
+          .update({
+            worker_id: workerProfile.id,
+            status: 'accepted',
+            accepted_at: job.accepted_at,
+            assigned_at: job.assigned_at,
+            updated_at: job.updated_at,
+          })
+          .eq('job_number', job.job_number || id);
+      } catch {}
+    }
 
     // Dispatch real-time notification to customer
     if (job.customer_id) {
@@ -945,15 +958,26 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
 
       // Query database worker profile if available
       try {
-        const { data: dbWorkers } = await supabaseAdmin
+        const { data: dbWorkerByUserId } = await supabaseAdmin
           .from('workers')
           .select('id, user_id')
-          .or(`user_id.eq.${userId},id.eq.${userId}`);
-        if (dbWorkers && dbWorkers.length > 0) {
-          for (const dbw of dbWorkers) {
-            if (dbw.id) workerIds.add(dbw.id);
-            if (dbw.user_id) workerIds.add(dbw.user_id);
-          }
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (dbWorkerByUserId) {
+          if (dbWorkerByUserId.id) workerIds.add(dbWorkerByUserId.id);
+          if (dbWorkerByUserId.user_id) workerIds.add(dbWorkerByUserId.user_id);
+        }
+      } catch {}
+
+      try {
+        const { data: dbWorkerById } = await supabaseAdmin
+          .from('workers')
+          .select('id, user_id')
+          .eq('id', userId)
+          .maybeSingle();
+        if (dbWorkerById) {
+          if (dbWorkerById.id) workerIds.add(dbWorkerById.id);
+          if (dbWorkerById.user_id) workerIds.add(dbWorkerById.user_id);
         }
       } catch {}
 
@@ -996,6 +1020,26 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
         ) {
           isAssigned = true;
         }
+      }
+
+      // Reverse lookup in Supabase if not yet resolved
+      if (!isAssigned && job.worker_id) {
+        try {
+          const { data: dbAssignedWorker } = await supabaseAdmin
+            .from('workers')
+            .select('id, user_id')
+            .eq('id', job.worker_id)
+            .maybeSingle();
+          if (
+            dbAssignedWorker &&
+            (dbAssignedWorker.user_id === userId ||
+              dbAssignedWorker.id === userId ||
+              workerIds.has(dbAssignedWorker.id) ||
+              workerIds.has(dbAssignedWorker.user_id))
+          ) {
+            isAssigned = true;
+          }
+        } catch {}
       }
 
       console.log(
