@@ -87,6 +87,25 @@ export interface StoreWalletTransaction {
   created_at: string;
 }
 
+export interface StorePayment {
+  id: string;
+  job_id: string;
+  customer_id: string;
+  worker_id?: string | null;
+  amount: number;
+  worker_earnings: number;
+  cooperative_share: number;
+  payment_method: string;
+  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  razorpay_order_id: string;
+  gateway_payment_id?: string | null;
+  gateway_order_id?: string | null;
+  gateway_signature?: string | null;
+  paid_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface StoreDispatchAttempt {
   id: string;
   job_id: string;
@@ -101,6 +120,7 @@ class InMemoryStore {
   public users: Map<string, StoreUser> = new Map();
   public workers: Map<string, StoreWorker> = new Map();
   public jobs: Map<string, StoreJob> = new Map();
+  public payments: Map<string, StorePayment> = new Map();
   public dispatchAttempts: StoreDispatchAttempt[] = [];
   public notifications: any[] = [];
   public cooperativeDistributions: Map<string, StoreCooperativeDistribution> = new Map();
@@ -874,6 +894,34 @@ class InMemoryStore {
     return this.walletTransactions.filter(
       (tx) => (workerId && tx.worker_id === workerId) || (userId && tx.worker_id === userId)
     );
+  }
+
+  public addPayment(payment: StorePayment): StorePayment {
+    this.payments.set(payment.id, payment);
+    this.payments.set(payment.razorpay_order_id, payment);
+    return payment;
+  }
+
+  public getPaymentById(id: string): StorePayment | undefined {
+    return this.payments.get(id);
+  }
+
+  public getPaymentByOrderId(orderId: string): StorePayment | undefined {
+    return this.payments.get(orderId);
+  }
+
+  public getPaymentByJobId(jobId: string): StorePayment | undefined {
+    return Array.from(this.payments.values()).find((p) => p.job_id === jobId);
+  }
+
+  public getPaymentsByCustomerId(customerId: string): StorePayment[] {
+    const unique = new Map<string, StorePayment>();
+    for (const p of this.payments.values()) {
+      if (p.customer_id === customerId) {
+        unique.set(p.id, p);
+      }
+    }
+    return Array.from(unique.values());
   }
 }
 

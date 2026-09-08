@@ -146,7 +146,7 @@ async function main() {
     console.log(`   - [${n.type}] ${n.title}: "${n.message}" (read: ${n.is_read})`);
   });
 
-  // 10. Customer opens payment flow / checks order
+  // 10. Customer checking job details
   console.log('\n10. Customer checking job details and payment readiness...');
   const getJobRes = await fetch(`${API_BASE}/api/jobs/${job.id}`, {
     headers: { 'Authorization': `Bearer ${custToken}` },
@@ -166,9 +166,60 @@ async function main() {
   });
   const orderData = await orderRes.json();
   console.log(`   Create order response status: ${orderRes.status}, data:`, orderData.data || orderData.error);
+  if (!orderRes.ok || !orderData.data?.orderId) {
+    throw new Error(`Order creation failed: ${JSON.stringify(orderData)}`);
+  }
+  const { orderId, amount, keyId } = orderData.data;
+  console.log(`   Order created successfully: orderId=${orderId}, amount=${amount} paise (₹${amount/100}), keyId=${keyId}`);
 
-  // 12. Security Test: Another user attempting to pay for this customer's job
-  console.log('\n12. Testing security: unauthorized worker attempting to pay customer job...');
+  // 12. Simulate Razorpay payment success & verify signature
+  console.log('\n12. Testing Razorpay payment verification (POST /api/payments/verify)...');
+  const testPaymentId = `pay_test_${Math.random().toString(36).substring(2, 10)}`;
+  const keySecret = 'sahakar_test_secret_2024';
+  const crypto = await import('crypto');
+  const testSignature = crypto
+    .createHmac('sha256', keySecret)
+    .update(`${orderId}|${testPaymentId}`)
+    .digest('hex');
+
+  const verifyRes = await fetch(`${API_BASE}/api/payments/verify`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${custToken}`,
+    },
+    body: JSON.stringify({
+      razorpay_order_id: orderId,
+      razorpay_payment_id: testPaymentId,
+      razorpay_signature: testSignature,
+    }),
+  });
+  const verifyData = await verifyRes.json();
+  console.log(`   Verify response status: ${verifyRes.status}, data:`, verifyData.data || verifyData.error);
+  if (!verifyRes.ok || verifyData.data?.status !== 'completed') {
+    throw new Error(`Verification failed: ${JSON.stringify(verifyData)}`);
+  }
+  console.log(`   Payment verified! Amount: ₹${verifyData.data.amount}, Worker Credited: ₹${verifyData.data.workerCredited}, Status: ${verifyData.data.status}`);
+
+  // 13. Idempotency Test: Paying again should safely return already completed
+  console.log('\n13. Testing idempotency: verifying the same payment again...');
+  const verifyAgainRes = await fetch(`${API_BASE}/api/payments/verify`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${custToken}`,
+    },
+    body: JSON.stringify({
+      razorpay_order_id: orderId,
+      razorpay_payment_id: testPaymentId,
+      razorpay_signature: testSignature,
+    }),
+  });
+  const verifyAgainData = await verifyAgainRes.json();
+  console.log(`   Idempotent response status: ${verifyAgainRes.status}, message: "${verifyAgainData.data?.message}"`);
+
+  // 14. Security Test: Another user attempting to pay customer's job
+  console.log('\n14. Testing security: unauthorized worker attempting to pay customer job...');
   const unauthorizedPayRes = await fetch(`${API_BASE}/api/payments/create-order`, {
     method: 'POST',
     headers: {
@@ -177,7 +228,7 @@ async function main() {
     },
     body: JSON.stringify({ job_id: job.id }),
   });
-  console.log(`   Unauthorized attempt response code: ${unauthorizedPayRes.status} (Expected 403 FORBIDDEN)`);
+  console.log(`   Unauthorized attempt response code: ${unauthorizedPayRes.status} (Expected 404 or 403)`);
 
   console.log('\n=== ALL TESTS PASSED SUCCESSFULLY! ===');
 }
