@@ -192,14 +192,21 @@ export function CustomerHome() {
     }
   }, []);
 
-  // Poll for worker acceptance when in dispatch mode
+  // Poll for worker acceptance when in dispatch mode.
+  // Also continues polling while the customer views My Requests (so the
+  // worker-accepted transition fires even if they navigate away from the
+  // dispatch screen before a worker accepts).
   useEffect(() => {
-    if (stage !== 'dispatch' || !activeJob?.id) return;
+    if (!['dispatch', 'my_requests'].includes(stage) || !activeJob?.id) return;
+    // Only poll while the job is still waiting for a worker
+    if (assignedWorker) return;
 
-    // Simulate animated dispatch steps
-    const progressTimer = setInterval(() => {
-      setMatchingProgress((prev) => (prev < 4 ? prev + 1 : prev));
-    }, 800);
+    // Animate dispatch steps only when the dispatch screen is visible
+    const progressTimer = stage === 'dispatch'
+      ? setInterval(() => {
+          setMatchingProgress((prev) => (prev < 4 ? prev + 1 : prev));
+        }, 800)
+      : null;
 
     // Poll backend for real worker acceptance
     const pollInterval = setInterval(async () => {
@@ -215,7 +222,7 @@ export function CustomerHome() {
             ['accepted', 'on_the_way', 'arrived', 'in_progress', 'completed'].includes(updatedJob.status)
           ) {
             clearInterval(pollInterval);
-            clearInterval(progressTimer);
+            if (progressTimer) clearInterval(progressTimer);
 
             // Fetch worker details
             try {
@@ -236,10 +243,10 @@ export function CustomerHome() {
     }, 2500);
 
     return () => {
-      clearInterval(progressTimer);
+      if (progressTimer) clearInterval(progressTimer);
       clearInterval(pollInterval);
     };
-  }, [stage, activeJob?.id]);
+  }, [stage, activeJob?.id, assignedWorker]);
 
   // Handler: Category selected → show sub-service selection
   const handleStartRequest = (cat?: ServiceCategory) => {
@@ -436,9 +443,13 @@ export function CustomerHome() {
   // STAGE: Worker Found Screen
   if (stage === 'matched' && activeJob) {
     const workerName = assignedWorker?.user?.name || assignedWorker?.name || activeJob.worker_name || 'Rajesh Kumar';
-    const workerRating = assignedWorker?.rating || 4.8;
+    const workerRating = assignedWorker?.rating ? Number(assignedWorker.rating) : 4.8;
     const completedJobs = assignedWorker?.completed_jobs || 124;
-    const distanceKm = 2.1;
+    // Use real distance from worker profile if available, else fall back gracefully
+    const distanceKm: number =
+      assignedWorker?.distance_km ??
+      activeJob.worker_distance_km ??
+      2.1;
 
     return (
       <main className="mx-auto flex min-h-screen max-w-4xl items-center px-4 py-10 sm:px-6 md:px-10">

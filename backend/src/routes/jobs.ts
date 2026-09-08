@@ -796,12 +796,23 @@ router.post('/:id/reject', [authenticate, requireWorker], async (req: Request, r
 
 /**
  * PATCH /api/jobs/:id/status
- * Update job status (with validation of state machine)
+ * Update job status (with validation of state machine).
+ *
+ * Ownership + cancellation rules:
+ *  - Customer may only update their OWN jobs.
+ *  - Customer cancellation is only allowed while no worker has accepted
+ *    (statuses: pending / matching / matched).  Once a worker accepted the
+ *    job the customer must contact support — the simple cancel path is blocked.
+ *  - Workers may update jobs assigned to them.
+ *  - Admins may update any job.
+ *  - All transitions are validated against STATUS_TRANSITIONS.
  */
 router.patch('/:id/status', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { status: newStatus } = req.body;
+    const { status: newStatus, reason } = req.body;
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
 
     if (!newStatus) {
       res.status(400).json({
@@ -812,11 +823,10 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
     }
 
     let job = inMemoryStore.getJob(id);
-
     if (!job) {
       try {
         const { data } = await supabaseAdmin.from('jobs').select('*').eq('id', id).maybeSingle();
-        job = data;
+        if (data) job = data;
       } catch {}
     }
 
@@ -828,6 +838,98 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
       return;
     }
 
+    // ── Ownership / authorisation checks ─────────────────────────────────
+    if (userRole === 'customer') {
+      // Customer may only touch their own jobs
+      if (job.customer_id !== userId) {
+        res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'You do not have permission to update this job.' },
+        });
+        return;
+      }
+
+      // Customer cancellation: only allowed before a worker has accepted
+      if (newStatus === 'cancelled') {
+        const cancellableByCustomer = ['pending', 'matching', 'matched'];
+        if (!cancellableByCustomer.includes(job.status)) {
+          res.status(400).json({
+            success: false,
+            error: {
+              code: 'CANCELLATION_NOT_ALLOWED',
+              message:
+                job.status === 'accepted' || job.status === 'on_the_way' || job.status === 'arrived'
+                  ? 'A worker has already accepted this request. Please contact support to cancel.'
+                  : `Cannot cancel a job with status "${job.status}".`,
+            },
+          });
+          return;
+        }
+      } else {
+        // Customers may only set 'cancelled' — all other transitions are worker/admin actions
+        res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Customers may only cancel their own service requests.',
+          },
+        });
+        return;
+      }
+    }
+
+    if (userRole === 'worker') {
+      // Workers may only update jobs assigned to them
+      let workerProfile: any = inMemoryStore.getWorkerByUserId(userId);
+      if (!workerProfile) {
+        try {
+          const { data } = await supabaseAdmin
+            .from('workers').select('id, user_id').eq('user_id', userId).maybeSingle();
+          workerProfile = data;
+        } catch {}
+      }
+      const workerIds = new Set([userId, workerProfile?.id, workerProfile?.user_id].filter(Boolean));
+      if (!job.worker_id || !workerIds.has(job.worker_id)) {
+        res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'You are not assigned to this job.' },
+        });
+        return;
+      }
+    }
+    // admins pass through with no additional restriction
+
+    // ── State-machine validation ──────────────────────────────────────────
+    if (!isValidTransition(job.status, newStatus)) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_TRANSITION',
+          message: `Cannot transition job from "${job.status}" to "${newStatus}".`,
+        },
+      });
+      return;
+    }
+
+    // ── When customer cancels a pre-acceptance job: cancel all pending dispatch attempts ──
+    if (newStatus === 'cancelled') {
+      try {
+        // Mark all outstanding dispatch attempts as cancelled so workers
+        // can no longer see or accept this request
+        for (const attempt of inMemoryStore.dispatchAttempts) {
+          if (attempt.job_id === id && (!attempt.response || attempt.response === 'pending')) {
+            attempt.response = 'cancelled';
+          }
+        }
+        await supabaseAdmin
+          .from('job_dispatch_attempts')
+          .update({ response: 'cancelled' })
+          .eq('job_id', id)
+          .is('response', null);
+      } catch {}
+    }
+
+    // ── Apply status update ───────────────────────────────────────────────
     const isAlreadyCompleted = job.status === 'completed';
     const isTransitioningToCompleted = newStatus === 'completed' && !isAlreadyCompleted;
 
@@ -839,18 +941,13 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
       if (isTransitioningToCompleted && job.worker_id) {
         const jobAmount = job.actual_price;
         const workerEarning = Math.round(jobAmount * 0.85);
-
-        // Credit in-memory wallet
         inMemoryStore.creditWorkerWallet(job.worker_id, workerEarning);
-
-        // Credit Supabase worker wallet (idempotent)
         try {
           const { data: wallet } = await supabaseAdmin
             .from('worker_wallets')
             .select('balance, total_earned')
             .eq('worker_id', job.worker_id)
             .maybeSingle();
-
           if (wallet) {
             await supabaseAdmin
               .from('worker_wallets')
@@ -863,6 +960,7 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
         } catch {}
       }
     }
+
     job.updated_at = new Date().toISOString();
     inMemoryStore.addJob(job);
 
@@ -878,18 +976,22 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
         .eq('id', id);
     } catch {}
 
-    const earned = newStatus === 'completed' ? Math.round((job.actual_price || job.estimated_price || 600) * 0.85) : undefined;
+    const earned =
+      newStatus === 'completed'
+        ? Math.round((job.actual_price || job.estimated_price || 600) * 0.85)
+        : undefined;
 
-    // Send lifecycle notifications
+    // ── Lifecycle notifications ───────────────────────────────────────────
     if (newStatus === 'on_the_way' || newStatus === 'arrived') {
       if (job.customer_id) {
         createNotification({
           user_id: job.customer_id,
           type: 'WORKER_ON_THE_WAY',
           title: newStatus === 'arrived' ? 'Worker Arrived' : 'Worker On The Way',
-          message: newStatus === 'arrived'
-            ? `${job.worker_name || 'Your worker'} has arrived at your location.`
-            : `${job.worker_name || 'Your worker'} is on the way to your location.`,
+          message:
+            newStatus === 'arrived'
+              ? `${job.worker_name || 'Your worker'} has arrived at your location.`
+              : `${job.worker_name || 'Your worker'} is on the way to your location.`,
           data: { job_id: id, status: newStatus },
         }).catch(console.warn);
       }

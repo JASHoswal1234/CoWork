@@ -420,6 +420,17 @@ export const jobsApi = {
       body: JSON.stringify({ status, reason }),
     }),
 
+  /**
+   * Customer cancellation — only works while no worker has accepted.
+   * Backend will return 400 CANCELLATION_NOT_ALLOWED if the job is past
+   * the cancellable window (accepted / on_the_way / arrived / etc.).
+   */
+  cancel: (id: string) =>
+    request<{ job: any }>(`/api/jobs/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'cancelled' }),
+    }),
+
   dispute: (id: string, reason: string) =>
     request(`/api/jobs/${id}/dispute`, {
       method: 'POST',
