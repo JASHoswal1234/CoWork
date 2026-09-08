@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { RoleProvider, useRole } from './contexts/RoleContext';
+import { RoleProvider, useRole, type Role } from './contexts/RoleContext';
 import { MockDataProvider } from './contexts/MockDataContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -27,15 +27,17 @@ import { SkillIntelligence } from './features/cooperative/SkillIntelligence';
 
 function AppRoutes() {
   const { role, switchRole } = useRole();
-  const { user, isAuthenticated, demoLogin } = useAuth();
+  const { user, isAuthenticated } = useAuth();
 
   React.useEffect(() => {
     if (isAuthenticated && user?.role) {
       if (role === 'cooperative' && user.role !== 'admin' && user.role !== 'cooperative') {
-        demoLogin('cooperative').catch(console.warn);
+        // User doesn't have cooperative access, switch them back to their actual role
+        const userRole = user.role === 'admin' ? 'cooperative' : user.role;
+        switchRole(userRole as Role);
       }
     }
-  }, [role, user?.role, isAuthenticated]);
+  }, [role, user?.role, isAuthenticated, switchRole]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background-primary font-body">

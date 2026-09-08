@@ -8,7 +8,7 @@ import { NotificationBell } from '../notifications/NotificationBell';
 
 export function Header() {
   const { role, switchRole } = useRole();
-  const { user, isAuthenticated, logout, demoLogin } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isSwitching, setIsSwitching] = useState(false);
@@ -31,21 +31,13 @@ export function Header() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleRoleChange = async (targetRole: Role) => {
+  const handleRoleChange = (targetRole: Role) => {
     if (targetRole === role || isSwitching) return;
     setIsSwitching(true);
-    try {
-      await demoLogin(targetRole);
-      switchRole(targetRole);
-      navigate('/');
-    } catch (e) {
-      console.warn('Role switch error:', e);
-      switchRole(targetRole);
-      navigate('/');
-    } finally {
-      setIsSwitching(false);
-      setMobileMenuOpen(false);
-    }
+    switchRole(targetRole);
+    navigate('/');
+    setIsSwitching(false);
+    setMobileMenuOpen(false);
   };
 
   const handleNavClick = () => {
@@ -160,50 +152,10 @@ export function Header() {
               {/* Notification Bell */}
               <NotificationBell />
 
-              {/* Role Switcher Pills */}
-              <div className="flex items-center rounded-full border border-status-subtle bg-background-primary p-1 shadow-sm">
-                <button
-                  onClick={() => handleRoleChange('customer')}
-                  disabled={isSwitching}
-                  className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10px] font-bold uppercase transition ${
-                    role === 'customer'
-                      ? 'bg-accent-primary text-white shadow-sm'
-                      : 'text-text-secondary hover:text-text-navy'
-                  }`}
-                >
-                  <User size={12} />
-                  <span>Customer</span>
-                </button>
-                <button
-                  onClick={() => handleRoleChange('worker')}
-                  disabled={isSwitching}
-                  className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10px] font-bold uppercase transition ${
-                    role === 'worker'
-                      ? 'bg-accent-primary text-white shadow-sm'
-                      : 'text-text-secondary hover:text-text-navy'
-                  }`}
-                >
-                  <Briefcase size={12} />
-                  <span>Worker</span>
-                </button>
-                <button
-                  onClick={() => handleRoleChange('cooperative')}
-                  disabled={isSwitching}
-                  className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10px] font-bold uppercase transition ${
-                    role === 'cooperative'
-                      ? 'bg-text-navy text-white shadow-sm'
-                      : 'text-text-secondary hover:text-text-navy'
-                  }`}
-                >
-                  <Shield size={12} />
-                  <span>Admin</span>
-                </button>
-              </div>
-
               {/* User badge */}
               <div className="hidden md:flex flex-col items-end">
                 <span className="text-xs font-semibold text-text-navy">{user?.name || user?.email?.split('@')[0]}</span>
-                <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-accent-primary">{role}</span>
+                <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-accent-primary">{user?.role || 'user'}</span>
               </div>
 
               {/* Logout Button */}
@@ -219,13 +171,13 @@ export function Header() {
           ) : (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleRoleChange('customer')}
+                onClick={() => navigate('/')}
                 className="flex items-center gap-1.5 rounded-full border border-status-subtle bg-white px-3.5 py-1.5 font-mono text-[11px] font-semibold text-text-navy transition hover:border-accent-primary hover:text-accent-primary"
               >
                 <span>Portal Login</span>
               </button>
               <button
-                onClick={() => handleRoleChange('worker')}
+                onClick={() => navigate('/')}
                 className="flex items-center gap-1.5 rounded-full bg-accent-primary px-3.5 py-1.5 font-mono text-[11px] font-bold text-white shadow-sm transition hover:bg-accent-hover"
               >
                 <span>Join Network</span>
@@ -314,40 +266,10 @@ export function Header() {
           <div className="border-t border-status-subtle pt-3">
             {isAuthenticated ? (
               <div className="space-y-3">
-                <p className="font-mono text-[10px] font-semibold text-text-tertiary tracking-wider uppercase">
-                  Switch Role
-                </p>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => handleRoleChange('customer')}
-                    className={`py-2 rounded-xl text-center font-mono text-[10px] font-bold uppercase transition ${
-                      role === 'customer' ? 'bg-accent-primary text-white' : 'bg-background-primary text-text-secondary'
-                    }`}
-                  >
-                    Customer
-                  </button>
-                  <button
-                    onClick={() => handleRoleChange('worker')}
-                    className={`py-2 rounded-xl text-center font-mono text-[10px] font-bold uppercase transition ${
-                      role === 'worker' ? 'bg-accent-primary text-white' : 'bg-background-primary text-text-secondary'
-                    }`}
-                  >
-                    Worker
-                  </button>
-                  <button
-                    onClick={() => handleRoleChange('cooperative')}
-                    className={`py-2 rounded-xl text-center font-mono text-[10px] font-bold uppercase transition ${
-                      role === 'cooperative' ? 'bg-text-navy text-white' : 'bg-background-primary text-text-secondary'
-                    }`}
-                  >
-                    Admin
-                  </button>
-                </div>
-
                 <div className="flex items-center justify-between pt-2">
                   <div className="flex flex-col">
                     <span className="text-xs font-semibold text-text-navy">{user?.name || user?.email?.split('@')[0]}</span>
-                    <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-accent-primary">{role}</span>
+                    <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-accent-primary">{user?.role || 'user'}</span>
                   </div>
                   <button
                     onClick={handleLogout}
@@ -361,13 +283,13 @@ export function Header() {
             ) : (
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={() => handleRoleChange('customer')}
+                  onClick={() => navigate('/')}
                   className="rounded-xl border border-status-subtle py-2.5 text-center font-mono text-xs font-semibold text-text-navy"
                 >
                   Sign In
                 </button>
                 <button
-                  onClick={() => handleRoleChange('worker')}
+                  onClick={() => navigate('/')}
                   className="rounded-xl bg-accent-primary py-2.5 text-center font-mono text-xs font-bold text-white shadow-sm"
                 >
                   Join Network

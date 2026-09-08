@@ -5,7 +5,7 @@ import { useRole, type Role } from '../../contexts/RoleContext';
 import { Sparkles, Shield, Briefcase, User, ExternalLink } from 'lucide-react';
 
 export function Footer() {
-  const { isAuthenticated, logout, demoLogin } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
   const { role, switchRole } = useRole();
   const navigate = useNavigate();
 
@@ -19,20 +19,10 @@ export function Footer() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleRoleQuickSwitch = async (targetRole: Role) => {
-    try {
-      if (!isAuthenticated) {
-        await demoLogin(targetRole);
-      }
-      switchRole(targetRole);
-      navigate('/');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (e) {
-      console.warn(e);
-      switchRole(targetRole);
-      navigate('/');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+  const handleRoleQuickSwitch = (targetRole: Role) => {
+    switchRole(targetRole);
+    navigate('/');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (

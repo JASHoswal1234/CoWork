@@ -1,34 +1,15 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useRole, type Role } from '../../contexts/RoleContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { LogOut, User, Briefcase, Shield } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 
 export function RoleSwitcher() {
-  const { role, switchRole } = useRole();
-  const { user, logout, demoLogin } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [isSwitching, setIsSwitching] = useState(false);
 
   const handleLogout = () => {
     logout();
     navigate('/');
-  };
-
-  const handleRoleChange = async (targetRole: Role) => {
-    if (targetRole === role || isSwitching) return;
-    setIsSwitching(true);
-    try {
-      await demoLogin(targetRole);
-      switchRole(targetRole);
-      navigate('/');
-    } catch (e) {
-      console.warn('Role switch error:', e);
-      switchRole(targetRole);
-      navigate('/');
-    } finally {
-      setIsSwitching(false);
-    }
   };
 
   return (
@@ -47,51 +28,13 @@ export function RoleSwitcher() {
           </span>
         </button>
 
-        {/* Center: Role Switcher Tabs */}
-        <div className="flex items-center rounded-full border border-status-subtle bg-white/90 p-1 shadow-sm">
-          <button
-            onClick={() => handleRoleChange('customer')}
-            disabled={isSwitching}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10px] font-bold uppercase transition ${
-              role === 'customer'
-                ? 'bg-accent-primary text-white shadow-sm'
-                : 'text-text-secondary hover:text-text-navy'
-            }`}
-          >
-            <User size={12} />
-            <span>Customer</span>
-          </button>
-          <button
-            onClick={() => handleRoleChange('worker')}
-            disabled={isSwitching}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10px] font-bold uppercase transition ${
-              role === 'worker'
-                ? 'bg-accent-primary text-white shadow-sm'
-                : 'text-text-secondary hover:text-text-navy'
-            }`}
-          >
-            <Briefcase size={12} />
-            <span>Worker</span>
-          </button>
-          <button
-            onClick={() => handleRoleChange('cooperative')}
-            disabled={isSwitching}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10px] font-bold uppercase transition ${
-              role === 'cooperative'
-                ? 'bg-text-navy text-white shadow-sm'
-                : 'text-text-secondary hover:text-text-navy'
-            }`}
-          >
-            <Shield size={12} />
-            <span>Admin</span>
-          </button>
-        </div>
+
 
         {/* Right side: user info + logout */}
         <div className="flex shrink-0 items-center gap-3">
           <div className="hidden flex-col items-end sm:flex">
             <span className="text-xs font-semibold text-text-navy">{user?.name || user?.email?.split('@')[0]}</span>
-            <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-accent-primary">{role}</span>
+            <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-accent-primary">{user?.role || 'user'}</span>
           </div>
           <button
             onClick={handleLogout}
