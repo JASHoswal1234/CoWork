@@ -455,16 +455,43 @@ export const filesApi = {
 // ─── Payments API ─────────────────────────────────────────────────────────────
 
 export const paymentsApi = {
-  createOrder: (jobId: string, amount: number) =>
-    request('/api/payments/create-order', {
+  /**
+   * Creates a Razorpay order for a completed job.
+   * Amount is determined server-side — do NOT pass an amount.
+   * Returns: { orderId, amount (paise), amountInr, currency, keyId, description }
+   */
+  createOrder: (jobId: string) =>
+    request<{
+      orderId: string;
+      amount: number;
+      amountInr: number;
+      currency: string;
+      keyId: string;
+      paymentRowId: string;
+      description: string;
+    }>('/api/payments/create-order', {
       method: 'POST',
-      body: JSON.stringify({ job_id: jobId, amount }),
+      body: JSON.stringify({ job_id: jobId }),
     }),
 
-  verify: (paymentId: string, status: 'success' | 'failed') =>
-    request('/api/payments/verify', {
+  /**
+   * Sends Razorpay callback fields to the backend for HMAC-SHA256 verification.
+   * Only called after Razorpay Checkout succeeds on the client.
+   * The backend verifies the signature before marking the payment complete.
+   */
+  verify: (payload: {
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  }) =>
+    request<{
+      message: string;
+      amount: number;
+      razorpay_payment_id: string;
+      status: string;
+    }>('/api/payments/verify', {
       method: 'POST',
-      body: JSON.stringify({ payment_id: paymentId, status }),
+      body: JSON.stringify(payload),
     }),
 
   getWallet: (workerId: string) =>

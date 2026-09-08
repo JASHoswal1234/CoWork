@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Check, CircleHelp, MapPin, Phone, ShieldCheck, Clock, CheckCircle2 } from 'lucide-react';
+import { Check, CircleHelp, MapPin, Phone, ShieldCheck, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { jobsApi, paymentsApi, reviewsApi, workersApi } from '../../lib/api';
 import { GoogleMap, type MapCoordinate } from '../../components/GoogleMap';
 
@@ -23,6 +23,35 @@ function parseCoordinate(value: any): MapCoordinate {
 
   return { lat: 18.5074, lng: 73.8077 };
 }
+
+// ─── Razorpay Checkout script loader ─────────────────────────────────────────
+// Loads the Razorpay Standard Checkout script once and resolves when ready.
+// Safe to call multiple times — subsequent calls reuse the same promise.
+let _rzpLoader: Promise<void> | null = null;
+
+function loadRazorpay(): Promise<void> {
+  if ((window as any).Razorpay) return Promise.resolve();
+  if (_rzpLoader) return _rzpLoader;
+
+  _rzpLoader = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[data-razorpay]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve());
+      existing.addEventListener('error', () => reject(new Error('Razorpay script failed to load')));
+      return;
+    }
+    const script = document.createElement('script');
+    script.dataset.razorpay = 'true';
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload  = () => resolve();
+    script.onerror = () => reject(new Error('Razorpay script failed to load'));
+    document.body.appendChild(script);
+  });
+
+  return _rzpLoader;
+}
+
 export function LiveJob() {
   const { jobId } = useParams();
   const { state } = useLocation();
@@ -36,6 +65,13 @@ export function LiveJob() {
   const [realWorker, setRealWorker] = useState<any>(state?.worker || null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusStepIndex, setStatusStepIndex] = useState(1); // 0=accepted, 1=on the way, 2=arrived, 3=service
+
+  // Razorpay payment state
+  const [paymentError, setPaymentError]   = useState<string | null>(null);
+  const [paymentId, setPaymentId]         = useState<string | null>(null); // razorpay_payment_id after success
+  const [paidAmount, setPaidAmount]       = useState<number>(0);
+  // Guard against opening Checkout twice while one is already in-flight
+  const checkoutOpenRef = useRef(false);
 
   const service = realJob?.service_category_name || state?.service || 'Plumbing';
   const price = realJob?.actual_price || realJob?.estimated_price || state?.price || 500;
@@ -174,17 +210,106 @@ export function LiveJob() {
   };
 
   const handleConfirmPayment = async () => {
+    if (!jobId || jobId === 'DEMO001' || checkoutOpenRef.current) return;
+
+    setPaymentError(null);
     setIsProcessing(true);
+
     try {
-      if (jobId && jobId !== 'DEMO001') {
-        await paymentsApi.createOrder(jobId, price);
-        await paymentsApi.verify(jobId, 'success');
+      // ── Step 1: backend creates the Razorpay order ──────────────────
+      const order = await paymentsApi.createOrder(jobId);
+
+      // ── Step 2: load Razorpay Checkout script ───────────────────────
+      try {
+        await loadRazorpay();
+      } catch {
+        setPaymentError('Could not load payment gateway. Please check your connection and try again.');
+        setIsProcessing(false);
+        return;
       }
-    } catch (err) {
-      console.warn('Payment API error:', err);
-    } finally {
+
+      setIsProcessing(false); // Checkout modal takes over from here
+      checkoutOpenRef.current = true;
+
+      // ── Step 3: open Razorpay Standard Checkout ─────────────────────
+      const rzp = new (window as any).Razorpay({
+        key:         order.keyId,
+        amount:      order.amount,       // paise — already set by backend
+        currency:    order.currency,
+        order_id:    order.orderId,
+        name:        'ShramSangam',
+        description: order.description,
+        image:       '/illustrations/hero.png',
+        prefill: {
+          name:  worker.name,
+          // email/contact intentionally omitted — customer data stays server-side
+        },
+        theme: { color: '#1a56db' },
+
+        // ── Success callback ─────────────────────────────────────────
+        // Razorpay calls this ONLY after the payment is captured on their side.
+        // We must still verify the signature server-side before trusting it.
+        handler: async (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id:   string;
+          razorpay_signature:  string;
+        }) => {
+          checkoutOpenRef.current = false;
+          setIsProcessing(true);
+          setPaymentError(null);
+
+          try {
+            const result = await paymentsApi.verify({
+              razorpay_order_id:   response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature:  response.razorpay_signature,
+            });
+
+            // Verification passed — advance to paid stage
+            setPaymentId(response.razorpay_payment_id);
+            setPaidAmount(result.amount ?? price);
+            setStage('paid');
+          } catch (verifyErr: any) {
+            console.error('[LiveJob] Payment verification failed:', verifyErr);
+            setPaymentError(
+              verifyErr?.message ||
+              'Payment could not be verified. Please contact support with your payment ID: ' +
+              response.razorpay_payment_id
+            );
+          } finally {
+            setIsProcessing(false);
+          }
+        },
+
+        // ── Modal dismiss ────────────────────────────────────────────
+        modal: {
+          ondismiss: () => {
+            checkoutOpenRef.current = false;
+            setIsProcessing(false);
+            setPaymentError('Payment was cancelled. You can try again.');
+          },
+        },
+      });
+
+      rzp.on('payment.failed', (response: any) => {
+        checkoutOpenRef.current = false;
+        setIsProcessing(false);
+        const desc = response?.error?.description || 'Payment failed. Please try again.';
+        setPaymentError(desc);
+      });
+
+      rzp.open();
+    } catch (err: any) {
+      console.error('[LiveJob] Payment initiation failed:', err);
+      checkoutOpenRef.current = false;
       setIsProcessing(false);
-      setStage('paid');
+      if (err?.code === 'ALREADY_PAID') {
+        setStage('paid');
+      } else if (err?.code === 'PAYMENT_GATEWAY_UNAVAILABLE') {
+        setPaymentError('Payment gateway is temporarily unavailable. Please try again later.');
+      } else {
+        setPaymentError(err?.message || 'Failed to initiate payment. Please try again.');
+      }
     }
   };
 
@@ -211,7 +336,7 @@ export function LiveJob() {
             {stage === 'completed'
               ? 'SERVICE COMPLETED'
               : stage === 'paid'
-              ? 'PAYMENT SUCCESSFUL'
+              ? 'PAYMENT VERIFIED'
               : 'REVIEW RECORDED'}
           </p>
           <div className="mx-auto mt-5 flex h-14 w-14 items-center justify-center rounded-full bg-accent-light text-accent-primary sm:mt-6 sm:h-16 sm:w-16">
@@ -225,6 +350,22 @@ export function LiveJob() {
               : 'Thank you for your rating!'}
           </h1>
 
+          {stage === 'paid' && (
+            <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 sm:mt-8">
+              <div className="flex items-center justify-center gap-2 text-emerald-700">
+                <CheckCircle2 size={18} />
+                <span className="font-mono text-xs font-bold tracking-wider">PAYMENT SUCCESSFUL</span>
+              </div>
+              <p className="mt-3 text-3xl font-extrabold tracking-[-0.05em] text-text-navy">
+                ₹{paidAmount || price}
+              </p>
+              {paymentId && (
+                <p className="mt-1.5 font-mono text-[10px] text-text-secondary">
+                  ID: {paymentId}
+                </p>
+              )}
+            </div>
+          )}
           {stage === 'completed' ? (
             <>
               <p className="mt-3.5 text-sm text-text-secondary sm:mt-4 sm:text-base">
@@ -235,14 +376,29 @@ export function LiveJob() {
                 <p className="mt-1.5 text-3xl font-extrabold tracking-[-0.05em] text-text-navy sm:mt-2 sm:text-4xl">
                   ₹{price}
                 </p>
-                <p className="mt-1.5 text-xs text-text-secondary sm:mt-2 sm:text-sm">UPI / Cooperative Escrow Payment</p>
+                <p className="mt-1.5 text-xs text-text-secondary sm:mt-2 sm:text-sm">
+                  Cooperative Secure Payment · Razorpay Test Mode
+                </p>
               </div>
+
+              {/* Inline payment error */}
+              {paymentError && (
+                <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-left text-sm text-red-700">
+                  <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+                  <span>{paymentError}</span>
+                </div>
+              )}
+
               <button
                 onClick={handleConfirmPayment}
                 disabled={isProcessing}
                 className="mt-6 w-full rounded-2xl bg-accent-primary py-3.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50 sm:mt-8 sm:py-4"
               >
-                {isProcessing ? 'PROCESSING PAYMENT…' : 'CONFIRM PAYMENT (₹' + price + ')'}
+                {isProcessing
+                  ? 'PROCESSING…'
+                  : paymentError
+                  ? `RETRY PAYMENT (₹${price})`
+                  : `PAY ₹${price}`}
               </button>
             </>
           ) : stage === 'paid' ? (

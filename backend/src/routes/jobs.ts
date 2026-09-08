@@ -915,9 +915,11 @@ router.patch('/:id/status', authenticate, async (req: Request, res: Response): P
     if (newStatus === 'cancelled') {
       try {
         // Mark all outstanding dispatch attempts as cancelled so workers
-        // can no longer see or accept this request
+        // can no longer see or accept this request.
+        // 'notified' is the initial status — attempts in this state have not
+        // yet been acted on by a worker and must be cancelled.
         for (const attempt of inMemoryStore.dispatchAttempts) {
-          if (attempt.job_id === id && (!attempt.response || attempt.response === 'pending')) {
+          if (attempt.job_id === id && attempt.response === 'notified') {
             attempt.response = 'cancelled';
           }
         }
