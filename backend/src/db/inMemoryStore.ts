@@ -553,43 +553,60 @@ class InMemoryStore {
   }
 
   public ensureWorkerForUser(userId: string, email: string = '', name: string = '', phone: string = ''): StoreWorker {
-    let existing = this.getWorkerByUserId(userId);
+    let existing = this.getWorkerByUserId(userId) || this.getWorkerById(userId);
     if (existing) return existing;
 
     const lowerEmail = (email || '').toLowerCase();
     const lowerName = (name || '').toLowerCase();
 
+    if (userId === '78b525a6-92cc-47fb-9cdc-58f3a8dd01d9' || lowerEmail.includes('rajesh') || lowerName.includes('rajesh')) {
+      const w = this.getWorkerById('worker-rajesh-001');
+      if (w) {
+        this.workers.set(userId, w);
+        return w;
+      }
+    } else if (userId === '78b525a6-92cc-47fb-9cdc-58f3a8dd01d2' || lowerEmail.includes('suresh') || lowerName.includes('suresh')) {
+      const w = this.getWorkerById('worker-suresh-002');
+      if (w) {
+        this.workers.set(userId, w);
+        return w;
+      }
+    } else if (userId === '78b525a6-92cc-47fb-9cdc-58f3a8dd01d3' || lowerEmail.includes('amit') || lowerName.includes('amit')) {
+      const w = this.getWorkerById('worker-amit-003');
+      if (w) {
+        this.workers.set(userId, w);
+        return w;
+      }
+    } else if (userId === '78b525a6-92cc-47fb-9cdc-58f3a8dd01d4' || lowerEmail.includes('manoj') || lowerName.includes('manoj')) {
+      const w = this.getWorkerById('worker-manoj-004');
+      if (w) {
+        this.workers.set(userId, w);
+        return w;
+      }
+    } else if (userId === '78b525a6-92cc-47fb-9cdc-58f3a8dd01d5' || lowerEmail.includes('ramesh') || lowerName.includes('ramesh')) {
+      const w = this.getWorkerById('worker-ramesh-005');
+      if (w) {
+        this.workers.set(userId, w);
+        return w;
+      }
+    } else if (userId === '78b525a6-92cc-47fb-9cdc-58f3a8dd01d6' || lowerEmail.includes('vikram') || lowerName.includes('vikram')) {
+      const w = this.getWorkerById('worker-vikram-006');
+      if (w) {
+        this.workers.set(userId, w);
+        return w;
+      }
+    } else if (userId === '78b525a6-92cc-47fb-9cdc-58f3a8dd01d7' || lowerEmail.includes('sunita') || lowerName.includes('sunita')) {
+      const w = this.getWorkerById('worker-sunita-007');
+      if (w) {
+        this.workers.set(userId, w);
+        return w;
+      }
+    }
+
     let category = 'General Service';
     let subcategory = 'General Maintenance';
     let photo_url = '/illustrations/worker-hero.png';
     let workerId = `worker-${userId.slice(0, 8)}`;
-
-    if (lowerEmail.includes('rajesh') || lowerName.includes('rajesh')) {
-      category = 'Plumbing';
-      subcategory = 'Pipe Fitting & Leak Repair';
-      photo_url = '/illustrations/plumber.png';
-      workerId = '78b525a6-92cc-47fb-9cdc-58f3a8dd01d9';
-    } else if (lowerEmail.includes('suresh') || lowerName.includes('suresh')) {
-      category = 'Electrical';
-      subcategory = 'Wiring & Fuse Repair';
-      photo_url = '/illustrations/electrician.png';
-      workerId = '78b525a6-92cc-47fb-9cdc-58f3a8dd01d2';
-    } else if (lowerEmail.includes('amit') || lowerName.includes('amit')) {
-      category = 'Electrical';
-      subcategory = 'Appliance Repair & Switchboards';
-      photo_url = '/illustrations/electrician.png';
-      workerId = '78b525a6-92cc-47fb-9cdc-58f3a8dd01d3';
-    } else if (lowerEmail.includes('manoj') || lowerName.includes('manoj')) {
-      category = 'Electrical';
-      subcategory = 'Circuit Breakers & Lighting';
-      photo_url = '/illustrations/electrician.png';
-      workerId = '78b525a6-92cc-47fb-9cdc-58f3a8dd01d4';
-    } else if (lowerEmail.includes('ramesh') || lowerName.includes('ramesh')) {
-      category = 'Carpentry';
-      subcategory = 'Furniture & Woodwork';
-      photo_url = '/illustrations/carpenter.png';
-      workerId = '78b525a6-92cc-47fb-9cdc-58f3a8dd01d5';
-    }
 
     const worker: StoreWorker = {
       id: workerId,
@@ -619,11 +636,28 @@ class InMemoryStore {
 
   public addJob(job: StoreJob): StoreJob {
     this.jobs.set(job.id, job);
+    if (job.job_number) {
+      this.jobs.set(job.job_number, job);
+    }
     return job;
   }
 
   public getJob(jobId: string): StoreJob | undefined {
-    return this.jobs.get(jobId);
+    if (!jobId) return undefined;
+    const direct = this.jobs.get(jobId);
+    if (direct) return direct;
+    const lower = jobId.toLowerCase().trim();
+    for (const j of this.jobs.values()) {
+      if (
+        j.id === jobId ||
+        (j.id && j.id.toLowerCase() === lower) ||
+        j.job_number === jobId ||
+        (j.job_number && j.job_number.toLowerCase() === lower)
+      ) {
+        return j;
+      }
+    }
+    return undefined;
   }
 
   public getIncomingJobsForWorker(workerIdOrUserId: string): StoreJob[] {

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase, supabaseAdmin } from '../config/supabase';
+import { inMemoryStore } from '../db/inMemoryStore';
 
 // Extend Express Request to include user
 declare global {
@@ -62,15 +63,26 @@ export async function authenticate(
       } catch {}
 
       if (!profile) {
-        const isWorker = userId.includes('78b525a6') || token.includes('worker');
-        const isAdmin = userId.includes('a1b2c3d4') || token.includes('admin');
-        profile = {
-          id: userId || '46740ff3-9955-4573-a4a5-d9d674ffa9e7',
-          email: isWorker ? 'rajesh@sahakar.org' : (isAdmin ? 'admin@cooperative.org' : 'customer@sahakar.org'),
-          phone: '+91 98220 11001',
-          name: isWorker ? 'Rajesh Kumar' : (isAdmin ? 'Cooperative Admin' : 'Priya Sharma'),
-          role: isWorker ? 'worker' : (isAdmin ? 'admin' : 'customer'),
-        };
+        const storeUser = inMemoryStore.users.get(userId);
+        if (storeUser) {
+          profile = {
+            id: storeUser.id,
+            email: storeUser.email,
+            phone: storeUser.phone || '+91 98220 11001',
+            name: storeUser.name,
+            role: storeUser.role,
+          };
+        } else {
+          const isWorker = userId.includes('78b525a6') || token.includes('worker');
+          const isAdmin = userId.includes('a1b2c3d4') || token.includes('admin');
+          profile = {
+            id: userId || '46740ff3-9955-4573-a4a5-d9d674ffa9e7',
+            email: isWorker ? 'rajesh@sahakar.org' : (isAdmin ? 'admin@cooperative.org' : 'customer@sahakar.org'),
+            phone: '+91 98220 11001',
+            name: isWorker ? 'Rajesh Kumar' : (isAdmin ? 'Cooperative Admin' : 'Priya Sharma'),
+            role: isWorker ? 'worker' : (isAdmin ? 'admin' : 'customer'),
+          };
+        }
       }
 
       req.user = profile;
@@ -153,15 +165,26 @@ export async function optionalAuth(
     if (token.startsWith('demo-token-')) {
       const parts = token.split('-');
       const userId = parts.slice(2, 7).join('-');
-      const isWorker = userId.includes('78b525a6');
-      const isAdmin = userId.includes('a1b2c3d4');
-      req.user = {
-        id: userId,
-        email: isWorker ? 'rajesh@sahakar.org' : (isAdmin ? 'admin@cooperative.org' : 'customer@sahakar.org'),
-        phone: '+91 98220 11001',
-        name: isWorker ? 'Rajesh Kumar' : (isAdmin ? 'Cooperative Admin' : 'Priya Sharma'),
-        role: isWorker ? 'worker' : (isAdmin ? 'admin' : 'customer'),
-      };
+      const storeUser = inMemoryStore.users.get(userId);
+      if (storeUser) {
+        req.user = {
+          id: storeUser.id,
+          email: storeUser.email,
+          phone: storeUser.phone || '+91 98220 11001',
+          name: storeUser.name,
+          role: storeUser.role,
+        };
+      } else {
+        const isWorker = userId.includes('78b525a6');
+        const isAdmin = userId.includes('a1b2c3d4');
+        req.user = {
+          id: userId,
+          email: isWorker ? 'rajesh@sahakar.org' : (isAdmin ? 'admin@cooperative.org' : 'customer@sahakar.org'),
+          phone: '+91 98220 11001',
+          name: isWorker ? 'Rajesh Kumar' : (isAdmin ? 'Cooperative Admin' : 'Priya Sharma'),
+          role: isWorker ? 'worker' : (isAdmin ? 'admin' : 'customer'),
+        };
+      }
       return next();
     }
 
