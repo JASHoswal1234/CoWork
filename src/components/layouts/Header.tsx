@@ -54,8 +54,8 @@ export function Header() {
             onClick={handleLogoClick}
             className="flex items-center gap-2.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary transition hover:opacity-90 cursor-pointer"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-primary text-white shadow-sm">
-              <Sparkles size={18} />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl overflow-hidden">
+              <img src="/logo/logo.png" alt="ShramSangam Logo" className="h-full w-full object-contain" />
             </div>
             <div className="flex flex-col">
               <span className="text-base sm:text-lg font-extrabold tracking-[-0.04em] text-text-navy leading-none">

@@ -127,7 +127,12 @@ router.get('/profile/me', authenticate, async (req: Request, res: Response): Pro
     } catch {}
 
     if (!worker) {
-      worker = inMemoryStore.getWorkerByUserId(userId) || inMemoryStore.ensureWorkerForUser(userId);
+      worker = inMemoryStore.getWorkerByUserId(userId) || inMemoryStore.ensureWorkerForUser(
+        userId,
+        req.user?.email || '',
+        req.user?.name || '',
+        req.user?.phone || ''
+      );
     }
 
     const memoryWorker = inMemoryStore.getWorkerByUserId(userId);

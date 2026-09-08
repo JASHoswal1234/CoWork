@@ -6,64 +6,92 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle, BookOpen, Award, ShieldCheck, FileCheck, TrendingUp, AlertTriangle, Star } from 'lucide-react';
 import { mlApi, workersApi } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function SkillPassport() {
+  const { user } = useAuth();
+  const [workerProfile, setWorkerProfile] = useState<any>(null);
   const [trainingData, setTrainingData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
-  // For demo: use a hardcoded worker ID or get from localStorage
-  const DEMO_WORKER_ID = localStorage.getItem('demo_worker_id') || '';
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!DEMO_WORKER_ID) {
-      setLoading(false);
-      return;
-    }
-    mlApi.getWorkerTrainingRecommendations(DEMO_WORKER_ID)
-      .then(setTrainingData)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [DEMO_WORKER_ID]);
+    const fetchWorkerData = async () => {
+      setLoading(true);
+      setError('');
+      
+      try {
+        // Fetch authenticated worker's profile
+        const profileRes = await workersApi.getProfileMe();
+        if (profileRes?.worker) {
+          setWorkerProfile(profileRes.worker);
+          
+          // Fetch ML training recommendations for this worker
+          if (profileRes.worker.id) {
+            try {
+              const trainingRes = await mlApi.getWorkerTrainingRecommendations(profileRes.worker.id);
+              setTrainingData(trainingRes);
+            } catch (mlErr) {
+              console.warn('ML recommendations not available:', mlErr);
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error('Failed to load worker profile:', err);
+        setError(err?.message || 'Failed to load profile');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Fallback mock worker for demo
-  const worker = {
-    name: 'Rajesh Kumar',
-    memberSince: 'March 2022',
-    todayEarnings: 1250,
-    monthEarnings: 28500,
-    totalJobs: trainingData?.performance?.total_completed || 167,
-    rating: trainingData?.performance?.avg_rating || 4.8,
-    skills: [
-      { name: 'Pipe Fitting', level: 'expert', verified: true },
-      { name: 'Leak Repair', level: 'expert', verified: true },
-      { name: 'Bathroom Fitting', level: 'intermediate', verified: true }
-    ],
-    certifications: [
-      { name: 'NCVT Plumber Certificate', issuer: 'National Council for Vocational Training', date: 'Nov 2021' }
-    ]
-  };
+    fetchWorkerData();
+  }, []);
 
-  const recommendations = trainingData?.recommendations || [
-    {
-      title: 'Advanced Plumbing Systems',
-      reason: 'Improve your technical expertise for complex installations',
-      priority: 'medium',
-      duration_weeks: 4,
-      type: 'technical',
-      modules: ['Advanced Diagnosis', 'Modern Tools', 'Quality Assurance'],
-    },
-    {
-      title: 'Safety Protocols',
-      reason: 'Stay updated with latest safety standards',
-      priority: 'low',
-      duration_weeks: 1,
-      type: 'safety',
-      modules: ['PPE Usage', 'Emergency Procedures'],
-    },
-  ];
+  // Build worker data from profile
+  const worker = workerProfile ? {
+    name: workerProfile.user?.name || workerProfile.name || user?.name || 'Worker',
+    memberSince: workerProfile.created_at ? new Date(workerProfile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Recently',
+    todayEarnings: workerProfile.wallet?.today_earnings || 0,
+    monthEarnings: workerProfile.wallet?.month_earnings || 0,
+    totalJobs: trainingData?.performance?.total_completed || workerProfile.completed_jobs || 0,
+    rating: trainingData?.performance?.avg_rating || workerProfile.rating || 0,
+    skills: workerProfile.skills?.map((s: any) => ({
+      name: s.subcategory || s.category,
+      level: s.skill_level || 'intermediate',
+      verified: s.verified ?? true
+    })) || [],
+    certifications: workerProfile.certifications || []
+  } : null;
+
+  const recommendations = trainingData?.recommendations || [];
 
   const performance = trainingData?.performance;
   const insights = trainingData?.insights || [];
+
+  if (loading) {
+    return (
+      <main className="mx-auto min-h-screen max-w-[1400px] px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14 flex items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-accent-primary border-t-transparent" />
+          <p className="mt-4 text-sm text-text-secondary">Loading your Skill Passport...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (error || !worker) {
+    return (
+      <main className="mx-auto min-h-screen max-w-[1400px] px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14 flex items-center justify-center">
+        <div className="text-center">
+          <AlertTriangle size={48} className="mx-auto text-red-500" />
+          <p className="mt-4 text-lg font-semibold text-text-navy">Failed to load Skill Passport</p>
+          <p className="mt-2 text-sm text-text-secondary">{error || 'Worker profile not found'}</p>
+        </div>
+      </main>
+    );
+  }
+
+  const primarySkill = worker.skills?.[0]?.name || 'Service Professional';
 
   return (
     <main className="mx-auto min-h-screen max-w-[1400px] px-4 py-6 sm:px-5 sm:py-8 md:px-10 md:py-14">
@@ -92,7 +120,7 @@ export function SkillPassport() {
               
               <div className="mt-5 space-y-2.5 sm:mt-6 sm:space-y-3">
                 <p className="text-base font-semibold tracking-[-0.02em] text-text-navy sm:text-lg md:text-xl">
-                  Plumbing Specialist
+                  {primarySkill}
                 </p>
                 <div className="flex items-center gap-2 text-xs text-text-secondary sm:text-sm">
                   <ShieldCheck size={16} className="text-accent-primary sm:h-[18px] sm:w-[18px]" strokeWidth={2.5} />
@@ -105,10 +133,10 @@ export function SkillPassport() {
             <div className="mt-auto grid grid-cols-3 gap-3.5 pt-6 sm:gap-4 sm:pt-8 md:max-w-lg md:gap-6">
               <div>
                 <p className="font-mono text-[8px] font-semibold tracking-[0.12em] text-text-tertiary sm:text-[9px]">
-                  EXPERIENCE
+                  MEMBER SINCE
                 </p>
-                <p className="mt-0.5 text-xl font-extrabold tracking-[-0.04em] text-text-navy sm:mt-1 sm:text-2xl md:text-3xl">
-                  4 YRS
+                <p className="mt-0.5 text-sm font-extrabold tracking-[-0.04em] text-text-navy sm:mt-1 sm:text-base md:text-lg">
+                  {worker.memberSince}
                 </p>
               </div>
               <div className="border-l border-text-navy/10 pl-3.5 sm:pl-4 md:pl-6">
@@ -124,7 +152,7 @@ export function SkillPassport() {
                   RATING
                 </p>
                 <p className="mt-0.5 text-xl font-extrabold tracking-[-0.04em] text-text-navy sm:mt-1 sm:text-2xl md:text-3xl">
-                  ★ {worker.rating}
+                  {worker.rating > 0 ? `★ ${worker.rating.toFixed(1)}` : 'NEW'}
                 </p>
               </div>
             </div>
@@ -142,7 +170,7 @@ export function SkillPassport() {
           <div className="mt-5 grid grid-cols-2 gap-5 sm:mt-6 sm:gap-6 md:gap-12">
             <div>
               <p className="text-[clamp(2rem,7vw,4rem)] font-extrabold leading-none tracking-[-0.05em] text-accent-primary">
-                ₹{worker.todayEarnings}
+                ₹{worker.todayEarnings.toLocaleString()}
               </p>
               <p className="mt-1.5 font-mono text-[9px] font-semibold tracking-[0.12em] text-text-tertiary sm:mt-2 sm:text-[10px]">
                 TODAY
@@ -150,7 +178,7 @@ export function SkillPassport() {
             </div>
             <div className="border-l border-status-subtle pl-5 sm:pl-6 md:pl-12">
               <p className="text-[clamp(2rem,7vw,4rem)] font-extrabold leading-none tracking-[-0.05em] text-text-navy">
-                ₹{worker.monthEarnings}
+                ₹{worker.monthEarnings.toLocaleString()}
               </p>
               <p className="mt-1.5 font-mono text-[9px] font-semibold tracking-[0.12em] text-text-tertiary sm:mt-2 sm:text-[10px]">
                 THIS MONTH
@@ -168,22 +196,28 @@ export function SkillPassport() {
             </h2>
           </div>
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {worker.skills.map((skill, index) => (
-              <div 
-                key={index} 
-                className="flex items-center gap-3.5 rounded-2xl border border-accent-primary/20 bg-accent-light/40 p-5 transition-all hover:bg-accent-light/60 hover:shadow-sm"
-              >
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-accent-primary">
-                  <CheckCircle size={20} className="text-white" strokeWidth={2.5} />
+            {worker.skills.length > 0 ? (
+              worker.skills.map((skill: any, index: number) => (
+                <div 
+                  key={index} 
+                  className="flex items-center gap-3.5 rounded-2xl border border-accent-primary/20 bg-accent-light/40 p-5 transition-all hover:bg-accent-light/60 hover:shadow-sm"
+                >
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-accent-primary">
+                    <CheckCircle size={20} className="text-white" strokeWidth={2.5} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold leading-tight text-text-navy">{skill.name}</p>
+                    <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-text-tertiary">
+                      {skill.level}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold leading-tight text-text-navy">{skill.name}</p>
-                  <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-text-tertiary">
-                    {skill.level}
-                  </p>
-                </div>
+              ))
+            ) : (
+              <div className="col-span-full rounded-2xl border border-status-subtle bg-background-primary p-8 text-center">
+                <p className="text-sm text-text-secondary">No verified skills yet. Complete jobs to build your skill profile.</p>
               </div>
-            ))}
+            )}
           </div>
         </section>
 
@@ -248,45 +282,51 @@ export function SkillPassport() {
             </div>
 
             <div className="mt-6 max-w-2xl space-y-4">
-              {recommendations.map((rec: any, index: number) => (
-                <div key={index} className="rounded-2xl bg-white/90 p-5 shadow-sm backdrop-blur-sm">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`rounded-full px-2 py-0.5 font-mono text-[8px] font-bold ${
-                          rec.priority === 'high' ? 'bg-red-100 text-red-700' :
-                          rec.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-green-100 text-green-700'
-                        }`}>
-                          {rec.priority.toUpperCase()}
-                        </span>
-                        <span className="font-mono text-[8px] text-text-tertiary">{rec.duration_weeks}W COURSE</span>
-                      </div>
-                      <p className="mt-2 font-semibold text-text-navy">{rec.title}</p>
-                      <p className="mt-1 text-xs leading-relaxed text-text-secondary">{rec.reason}</p>
-                      {rec.expected_rating_boost && (
-                        <p className="mt-2 font-mono text-[9px] font-bold text-accent-primary">
-                          ★ Expected: {rec.expected_rating_boost}
-                        </p>
-                      )}
-                      {rec.expected_income_boost && (
-                        <p className="mt-2 font-mono text-[9px] font-bold text-green-600">
-                          💰 {rec.expected_income_boost}
-                        </p>
-                      )}
-                      {rec.modules && (
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          {rec.modules.map((m: string, i: number) => (
-                            <span key={i} className="rounded-full border border-accent-primary/20 bg-accent-light/30 px-2 py-0.5 text-[10px] text-text-secondary">
-                              {m}
-                            </span>
-                          ))}
+              {recommendations.length > 0 ? (
+                recommendations.map((rec: any, index: number) => (
+                  <div key={index} className="rounded-2xl bg-white/90 p-5 shadow-sm backdrop-blur-sm">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`rounded-full px-2 py-0.5 font-mono text-[8px] font-bold ${
+                            rec.priority === 'high' ? 'bg-red-100 text-red-700' :
+                            rec.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                          }`}>
+                            {rec.priority.toUpperCase()}
+                          </span>
+                          <span className="font-mono text-[8px] text-text-tertiary">{rec.duration_weeks}W COURSE</span>
                         </div>
-                      )}
+                        <p className="mt-2 font-semibold text-text-navy">{rec.title}</p>
+                        <p className="mt-1 text-xs leading-relaxed text-text-secondary">{rec.reason}</p>
+                        {rec.expected_rating_boost && (
+                          <p className="mt-2 font-mono text-[9px] font-bold text-accent-primary">
+                            ★ Expected: {rec.expected_rating_boost}
+                          </p>
+                        )}
+                        {rec.expected_income_boost && (
+                          <p className="mt-2 font-mono text-[9px] font-bold text-green-600">
+                            💰 {rec.expected_income_boost}
+                          </p>
+                        )}
+                        {rec.modules && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {rec.modules.map((m: string, i: number) => (
+                              <span key={i} className="rounded-full border border-accent-primary/20 bg-accent-light/30 px-2 py-0.5 text-[10px] text-text-secondary">
+                                {m}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
+                ))
+              ) : (
+                <div className="rounded-2xl bg-white/90 p-8 text-center shadow-sm backdrop-blur-sm">
+                  <p className="text-sm text-text-secondary">No training recommendations available yet. Complete more jobs to receive personalized suggestions.</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </section>
@@ -300,23 +340,29 @@ export function SkillPassport() {
             </h2>
           </div>
           <div className="mt-6 space-y-4">
-            {worker.certifications.map((cert, index) => (
-              <div 
-                key={index} 
-                className="flex items-start gap-4 rounded-2xl border border-status-subtle bg-background-primary p-5 transition-all hover:border-accent-primary/30 hover:bg-accent-light/20"
-              >
-                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-accent-light">
-                  <Award size={24} className="text-accent-primary" strokeWidth={2} />
+            {worker.certifications.length > 0 ? (
+              worker.certifications.map((cert: any, index: number) => (
+                <div 
+                  key={index} 
+                  className="flex items-start gap-4 rounded-2xl border border-status-subtle bg-background-primary p-5 transition-all hover:border-accent-primary/30 hover:bg-accent-light/20"
+                >
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-accent-light">
+                    <Award size={24} className="text-accent-primary" strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold leading-tight text-text-navy">{cert.name}</p>
+                    <p className="mt-1 text-sm text-text-secondary">{cert.issuer}</p>
+                    <p className="mt-1.5 font-mono text-[10px] tracking-[0.08em] text-text-tertiary">
+                      ISSUED {cert.date.toUpperCase()}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold leading-tight text-text-navy">{cert.name}</p>
-                  <p className="mt-1 text-sm text-text-secondary">{cert.issuer}</p>
-                  <p className="mt-1.5 font-mono text-[10px] tracking-[0.08em] text-text-tertiary">
-                    ISSUED {cert.date.toUpperCase()}
-                  </p>
-                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-status-subtle bg-background-primary p-8 text-center">
+                <p className="text-sm text-text-secondary">No certifications added yet.</p>
               </div>
-            ))}
+            )}
           </div>
         </section>
 

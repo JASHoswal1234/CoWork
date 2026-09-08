@@ -178,12 +178,12 @@ class InMemoryStore {
     this.workers.set(rajeshWorker.id, rajeshWorker);
     this.workers.set(rajeshUser.id, rajeshWorker);
 
-    // 3. Seed Demo Worker 2: Suresh Patil (Electrician)
+    // 3. Seed Demo Worker 2: Suresh Yadav (Electrician)
     const sureshUser: StoreUser = {
       id: '78b525a6-92cc-47fb-9cdc-58f3a8dd01d2',
       email: 'suresh@sahakar.org',
       phone: '+919822011002',
-      name: 'Suresh Patil',
+      name: 'Suresh Yadav',
       role: 'worker',
     };
     this.users.set(sureshUser.id, sureshUser);
@@ -192,7 +192,7 @@ class InMemoryStore {
     const sureshWorker: StoreWorker = {
       id: 'worker-suresh-002',
       user_id: sureshUser.id,
-      name: 'Suresh Patil',
+      name: 'Suresh Yadav',
       phone: '+919822011002',
       photo_url: '/illustrations/electrician.png',
       category: 'Electrical',
@@ -477,7 +477,7 @@ class InMemoryStore {
     // Seed Cooperative Surplus Distributions for the historical period (36 jobs, ₹44,200 revenue)
     const historicalDistributions = [
       { workerId: 'worker-rajesh-001', name: 'Rajesh Kumar', work: 5300, sharePct: 11.99, dist: 795.00 },
-      { workerId: 'worker-suresh-002', name: 'Suresh Patil', work: 5300, sharePct: 11.99, dist: 795.00 },
+      { workerId: 'worker-suresh-002', name: 'Suresh Yadav', work: 5300, sharePct: 11.99, dist: 795.00 },
       { workerId: 'worker-ramesh-005', name: 'Ramesh Sharma', work: 6200, sharePct: 14.03, dist: 930.00 },
       { workerId: 'worker-vikram-006', name: 'Vikram Shinde', work: 13950, sharePct: 31.56, dist: 2092.50 },
       { workerId: 'worker-sunita-007', name: 'Sunita Jadhav', work: 7700, sharePct: 17.42, dist: 1155.00 },

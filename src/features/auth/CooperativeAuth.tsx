@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Mail, Lock, ArrowRight, Shield, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { UserGroup02Icon } from '@hugeicons/core-free-icons';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface Props { onSuccess: () => void; }
@@ -28,7 +30,7 @@ export function CooperativeAuth({ onSuccess }: Props) {
         {/* Header */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-text-navy">
-            <Shield size={32} className="text-white" />
+            <HugeiconsIcon icon={UserGroup02Icon} size={32} color="white" strokeWidth={1.5} />
           </div>
           <h1 className="text-4xl font-extrabold tracking-[-0.06em] text-text-navy">SAHAKAR</h1>
           <p className="mt-2 text-sm font-semibold text-text-secondary">Cooperative Admin Portal</p>

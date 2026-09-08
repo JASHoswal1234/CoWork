@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { ArrowRight, Shield, User, Briefcase, Mail, Lock, Phone, Eye, EyeOff, CheckCircle, FileCheck, Camera, AlertCircle, ChevronLeft } from 'lucide-react';
+import { ArrowRight, User, Briefcase, Mail, Lock, Phone, Eye, EyeOff, CheckCircle, FileCheck, Camera, AlertCircle, ChevronLeft } from 'lucide-react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { UserGroup02Icon } from '@hugeicons/core-free-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRole } from '../../contexts/RoleContext';
 
@@ -10,12 +12,6 @@ type WorkerStep = 'basic' | 'skills' | 'documents' | 'face-scan' | 'done';
 
 const SKILLS = ['Plumbing', 'Electrical', 'Carpentry', 'Painting', 'Cleaning', 'Appliance Repair', 'Masonry', 'Welding', 'AC Repair', 'CCTV Installation'];
 const CERTS = ['NCVT Certificate', 'ITI Diploma', 'NSDC Certification', 'State Skill Mission', 'Construction Worker Certificate'];
-
-const ROLE_CONFIG = {
-  customer: { label: 'Customer', subtitle: 'Book home services', color: 'bg-[#e3f2fd]', icon: User, img: '/illustrations/hero.png' },
-  worker: { label: 'Worker', subtitle: 'Find jobs & earn', color: 'bg-[#fff3e0]', img: '/illustrations/worker-hero.png', icon: Briefcase },
-  cooperative: { label: 'Cooperative', subtitle: 'Manage operations', color: 'bg-[#eaf1f8]', img: '/illustrations/cooperative-hero.png', icon: Shield },
-};
 
 export function AuthLanding() {
   const { login, register, isLoading } = useAuth();
@@ -194,7 +190,7 @@ export function AuthLanding() {
               {/* Illustration Region */}
               <div className="mt-6 flex h-36 sm:h-40 md:h-44 w-full items-end justify-end overflow-hidden">
                 <img
-                  src="/illustrations/hero.png"
+                  src="/illustrations/customer.png"
                   alt=""
                   aria-hidden
                   className="pointer-events-none h-full w-auto max-w-[85%] object-contain object-bottom-right opacity-90 transition-transform duration-500 group-hover:scale-105"
@@ -242,7 +238,7 @@ export function AuthLanding() {
               {/* Content Region */}
               <div className="flex flex-col">
                 <div className="inline-flex w-fit items-center justify-center rounded-2xl bg-white/90 p-3 shadow-sm">
-                  <Shield size={22} className="text-accent-primary" />
+                  <HugeiconsIcon icon={UserGroup02Icon} size={22} color="currentColor" strokeWidth={1.5} className="text-accent-primary" />
                 </div>
                 <h3 className="mt-4 text-2xl sm:text-[26px] font-extrabold tracking-[-0.04em] text-text-navy">
                   Cooperative
@@ -294,7 +290,7 @@ export function AuthLanding() {
             <h2 className="mt-6 text-5xl font-extrabold leading-[0.88] tracking-[-0.07em] text-text-navy">Book trusted<br />home services.</h2>
             <p className="mt-5 max-w-xs text-text-secondary">Verified cooperative workers at your doorstep.</p>
           </div>
-          <img src="/illustrations/hero.png" alt="" className="absolute bottom-0 right-0 h-[75%] w-auto max-w-none object-contain object-bottom" />
+          <img src="/illustrations/customer.png" alt="" className="absolute bottom-0 right-0 h-[75%] w-auto max-w-none object-contain object-bottom" />
         </div>
 
         {/* Right panel */}
@@ -375,7 +371,7 @@ export function AuthLanding() {
         <div className="flex w-full flex-col justify-center px-5 py-10 lg:max-w-md lg:bg-white lg:px-10">
           <BackBtn />
           <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-text-navy">
-            <Shield size={26} className="text-white" />
+            <HugeiconsIcon icon={UserGroup02Icon} size={26} color="white" strokeWidth={1.5} />
           </div>
           <h1 className="mt-4 text-3xl font-extrabold tracking-[-0.05em] text-text-navy">Admin Login</h1>
           <p className="mt-1 text-sm text-text-secondary">Registration is by invite only</p>

@@ -102,7 +102,7 @@ function ServiceCard({
         </div>
       </div>
       <img
-        src={illustrationByService[service.name] || '/illustrations/hero.png'}
+        src={illustrationByService[service.name] || '/illustrations/customer.png'}
         alt={`${service.name} service illustration`}
         className={`pointer-events-none absolute bottom-[-6%] right-[-12%] z-0 h-[82%] max-w-[72%] object-contain object-bottom transition-transform duration-500 group-hover:scale-[1.045] group-hover:-rotate-1 sm:right-[-9%] sm:h-[87%] sm:max-w-[70%] ${
           featured ? 'md:h-[104%] md:right-[1%] md:max-w-[52%]' : ''
@@ -506,7 +506,7 @@ export function CustomerHome() {
 
             <div className={`relative min-h-[220px] overflow-hidden rounded-[24px] ${surfaceByService[activeJob.service_category_name] || 'bg-[#e3f2fd]'}`}>
               <img
-                src={illustrationByService[activeJob.service_category_name] || '/illustrations/hero.png'}
+                src={illustrationByService[activeJob.service_category_name] || '/illustrations/customer.png'}
                 alt="Worker service"
                 className="absolute bottom-[-10%] right-[0%] h-[108%] w-full object-contain"
               />
@@ -592,7 +592,7 @@ export function CustomerHome() {
         >
           <div className="absolute inset-x-[4%] bottom-[-25%] h-[76%] rounded-t-full bg-[#eaf1f8]" />
           <img
-            src="/illustrations/hero.png"
+            src="/illustrations/customer.png"
             alt=""
             className="absolute bottom-[-10%] right-[-10%] h-[108%] max-w-[92%] object-contain object-bottom sm:right-[-8%] sm:h-[114%] sm:max-w-[90%] md:right-[3%]"
           />

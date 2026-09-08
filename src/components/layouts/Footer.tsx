@@ -2,7 +2,9 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRole, type Role } from '../../contexts/RoleContext';
-import { Sparkles, Shield, Briefcase, User, ExternalLink } from 'lucide-react';
+import { Sparkles, Briefcase, User, ExternalLink } from 'lucide-react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { UserGroup02Icon } from '@hugeicons/core-free-icons';
 
 export function Footer() {
   const { isAuthenticated, logout } = useAuth();
@@ -37,8 +39,8 @@ export function Footer() {
               onClick={handleLogoClick}
               className="flex items-center gap-2.5 transition hover:opacity-90 cursor-pointer"
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent-primary text-white shadow-sm">
-                <Sparkles size={16} />
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl overflow-hidden">
+                <img src="/logo/logo.png" alt="ShramSangam Logo" className="h-full w-full object-contain" />
               </div>
               <span className="text-lg font-extrabold tracking-[-0.04em] text-text-navy">
                 SHRAM SANGAM
@@ -157,7 +159,7 @@ export function Footer() {
                 className="flex items-center justify-between rounded-xl border border-status-subtle bg-[#F7F7F7] px-3.5 py-2.5 text-left text-xs font-semibold text-text-navy transition hover:border-accent-primary/40 hover:bg-white"
               >
                 <div className="flex items-center gap-2">
-                  <Shield size={14} className="text-text-navy" />
+                  <HugeiconsIcon icon={UserGroup02Icon} size={14} color="currentColor" strokeWidth={1.5} className="text-text-navy" />
                   <span>Cooperative Admin</span>
                 </div>
                 <span className="font-mono text-[9px] text-text-tertiary">MANAGE</span>

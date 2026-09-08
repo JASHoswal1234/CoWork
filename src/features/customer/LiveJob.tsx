@@ -225,7 +225,7 @@ export function LiveJob() {
         order_id:    order.orderId,
         name:        'ShramSangam',
         description: order.description,
-        image:       '/illustrations/hero.png',
+        image:       '/illustrations/customer.png',
         prefill: {
           name:  worker.name,
           // email/contact intentionally omitted — customer data stays server-side
